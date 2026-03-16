@@ -98,6 +98,9 @@ class Filters extends BaseFilters
             // PROTEGEMOS TODAS LAS RUTAS DE CATEGORÍAS (LISTADO, CREAR, EDITAR, ELIMINAR)
             'categorias',
             'categorias/*',
+            // PROTEGEMOS TODAS LAS RUTAS DE ETIQUETAS (LISTADO, CREAR, EDITAR, ELIMINAR)
+            'etiquetas',
+            'etiquetas/*',
         ]],
     ];
 }

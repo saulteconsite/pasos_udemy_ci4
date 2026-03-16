@@ -62,6 +62,24 @@ $routes->post('/categorias/update/(:num)', 'Categoria::update/$1');
 $routes->post('/categorias/delete/(:num)', 'Categoria::delete/$1');
 
 // =============================================
+// RUTAS CRUD PARA ETIQUETAS (SECCIÓN 15 - PROTEGIDAS POR FILTRO AUTH)
+// LAS ETIQUETAS SE ASIGNAN A PELÍCULAS EN RELACIÓN MUCHOS A MUCHOS
+// =============================================
+
+// GET /etiquetas -> MUESTRA EL LISTADO DE ETIQUETAS
+$routes->get('/etiquetas', 'Etiqueta::index');
+// GET /etiquetas/create -> MUESTRA EL FORMULARIO PARA CREAR
+$routes->get('/etiquetas/create', 'Etiqueta::create');
+// POST /etiquetas/store -> PROCESA Y GUARDA UNA NUEVA ETIQUETA
+$routes->post('/etiquetas/store', 'Etiqueta::store');
+// GET /etiquetas/edit/5 -> MUESTRA EL FORMULARIO PARA EDITAR (RECIBE ID NUMÉRICO)
+$routes->get('/etiquetas/edit/(:num)', 'Etiqueta::edit/$1');
+// POST /etiquetas/update/5 -> PROCESA Y ACTUALIZA UNA ETIQUETA (RECIBE ID NUMÉRICO)
+$routes->post('/etiquetas/update/(:num)', 'Etiqueta::update/$1');
+// POST /etiquetas/delete/5 -> ELIMINA UNA ETIQUETA (RECIBE ID NUMÉRICO)
+$routes->post('/etiquetas/delete/(:num)', 'Etiqueta::delete/$1');
+
+// =============================================
 // RUTAS DE LA API REST (SECCIÓN 12)
 // ESTAS RUTAS DEVUELVEN JSON EN VEZ DE HTML
 // SE USAN DESDE POSTMAN, APLICACIONES MÓVILES U OTROS FRONTENDS

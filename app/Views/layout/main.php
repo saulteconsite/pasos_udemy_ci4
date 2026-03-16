@@ -39,6 +39,12 @@
                             <i class="fa fa-tags"></i> Categorías
                         </a>
                     </li>
+                    <!-- ENLACE A LA SECCIÓN DE ETIQUETAS -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?= base_url('/etiquetas') ?>">
+                            <i class="fa fa-bookmark"></i> Etiquetas
+                        </a>
+                    </li>
                 <?php endif; ?>
             </ul>
 

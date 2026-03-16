@@ -21,7 +21,8 @@
 <?php endif; ?>
 
 <!-- FORMULARIO QUE ENVÍA LOS DATOS POR POST A LA RUTA STORE -->
-<form action="<?= base_url('/peliculas/store') ?>" method="POST">
+<!-- enctype="multipart/form-data" ES OBLIGATORIO PARA SUBIR ARCHIVOS -->
+<form action="<?= base_url('/peliculas/store') ?>" method="POST" enctype="multipart/form-data">
     <!-- TOKEN CSRF PARA PROTEGER CONTRA ATAQUES DE FALSIFICACIÓN DE PETICIONES -->
     <?= csrf_field() ?>
 
@@ -36,6 +37,51 @@
     <div class="mb-3">
         <label for="descripcion" class="form-label">Descripción</label>
         <textarea class="form-control" id="descripcion" name="descripcion" rows="4"><?= old('descripcion') ?></textarea>
+    </div>
+
+    <!-- SELECT DESPLEGABLE PARA ELEGIR LA CATEGORÍA (RELACIÓN 1:N) -->
+    <div class="mb-3">
+        <label for="categoria_id" class="form-label">Categoría</label>
+        <select class="form-select" id="categoria_id" name="categoria_id">
+            <!-- OPCIÓN POR DEFECTO: SIN CATEGORÍA -->
+            <option value="">-- Seleccionar categoría --</option>
+            <!-- RECORREMOS TODAS LAS CATEGORÍAS Y LAS MOSTRAMOS COMO OPCIONES -->
+            <?php foreach ($categorias as $categoria): ?>
+                <!-- selected: SI old('categoria_id') COINCIDE CON ESTA CATEGORÍA, LA PRESELECCIONAMOS -->
+                <option value="<?= $categoria['id'] ?>" <?= old('categoria_id') == $categoria['id'] ? 'selected' : '' ?>>
+                    <?= esc($categoria['titulo']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <!-- CHECKBOXES PARA ASIGNAR ETIQUETAS (RELACIÓN N:M) -->
+    <div class="mb-3">
+        <label class="form-label">Etiquetas</label>
+        <div class="row">
+            <!-- RECORREMOS TODAS LAS ETIQUETAS Y LAS MOSTRAMOS COMO CHECKBOXES -->
+            <?php foreach ($etiquetas as $etiqueta): ?>
+                <div class="col-md-3 col-6">
+                    <div class="form-check">
+                        <!-- CHECKBOX: name="etiquetas[]" ENVÍA UN ARRAY DE IDs AL CONTROLADOR -->
+                        <input class="form-check-input" type="checkbox" name="etiquetas[]" value="<?= $etiqueta['id'] ?>" id="etiqueta_<?= $etiqueta['id'] ?>">
+                        <!-- LABEL DEL CHECKBOX CON EL NOMBRE DE LA ETIQUETA -->
+                        <label class="form-check-label" for="etiqueta_<?= $etiqueta['id'] ?>">
+                            <?= esc($etiqueta['nombre']) ?>
+                        </label>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <!-- CAMPO PARA SUBIR IMAGEN (SECCIÓN 16: CARGA DE ARCHIVOS) -->
+    <div class="mb-3">
+        <label for="imagen" class="form-label">Imagen (opcional, máx. 2MB)</label>
+        <!-- accept="image/*" SOLO PERMITE SELECCIONAR ARCHIVOS DE IMAGEN -->
+        <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*">
+        <!-- TEXTO DE AYUDA DEBAJO DEL CAMPO -->
+        <div class="form-text">FORMATOS PERMITIDOS: JPG, JPEG, PNG, GIF. TAMAÑO MÁXIMO: 2MB</div>
     </div>
 
     <!-- BOTÓN PARA VOLVER AL LISTADO -->

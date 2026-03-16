@@ -3,7 +3,7 @@
 ![img](https://i.pinimg.com/originals/a1/f8/be/a1f8be54a08a324c83e747a8fa5ed660.gif)
 
 > [!NOTE]
-> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 12 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS Y CATEGORÍAS, VALIDACIONES AVANZADAS CON MENSAJES PERSONALIZADOS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO) Y UNA API REST COMPLETA PARA CATEGORÍAS Y PELÍCULAS. TODO DESPLEGADO CON DDEV EN WSL***
+> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 17 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS, CATEGORÍAS Y ETIQUETAS, RELACIONES UNO A MUCHOS (1:N) Y MUCHOS A MUCHOS (N:M), CARGA DE ARCHIVOS (IMÁGENES), VALIDACIONES AVANZADAS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO) Y UNA API REST COMPLETA. TODO DESPLEGADO CON DDEV EN WSL***
 
 ---
 
@@ -12,37 +12,49 @@
 ```
 app/
 ├── Config/
-│   ├── Routes.php                    # RUTAS CRUD, AUTH Y API REST
+│   ├── Routes.php                    # RUTAS CRUD, AUTH, ETIQUETAS Y API REST
 │   └── Filters.php                   # CONFIGURACIÓN DE FILTROS (AUTH, ADMIN)
 ├── Controllers/
-│   ├── Pelicula.php                  # CONTROLADOR CRUD PELÍCULAS (WEB)
+│   ├── Pelicula.php                  # CONTROLADOR CRUD PELÍCULAS (CON CATEGORÍA, ETIQUETAS E IMAGEN)
 │   ├── Categoria.php                 # CONTROLADOR CRUD CATEGORÍAS (WEB)
+│   ├── Etiqueta.php                  # CONTROLADOR CRUD ETIQUETAS/TAGS (WEB)
 │   ├── Auth.php                      # CONTROLADOR AUTENTICACIÓN (LOGIN, REGISTRO, LOGOUT)
 │   ├── ApiPelicula.php               # CONTROLADOR API REST PELÍCULAS (JSON)
 │   └── ApiCategoria.php              # CONTROLADOR API REST CATEGORÍAS (JSON)
 ├── Database/
 │   ├── Migrations/
-│   │   ├── 2026-03-12-113339_Peliculas.php   # MIGRACIÓN TABLA PELICULAS
-│   │   ├── 2026-03-12-114415_Categorias.php  # MIGRACIÓN TABLA CATEGORIAS
-│   │   └── 2026-03-16-100000_Usuarios.php    # MIGRACIÓN TABLA USUARIOS (CON HASH)
+│   │   ├── 2026-03-12-113339_Peliculas.php               # MIGRACIÓN TABLA PELICULAS
+│   │   ├── 2026-03-12-114415_Categorias.php              # MIGRACIÓN TABLA CATEGORIAS
+│   │   ├── 2026-03-16-100000_Usuarios.php                # MIGRACIÓN TABLA USUARIOS (CON HASH)
+│   │   ├── 2026-03-16-140000_AddCategoriaIdToPeliculas.php  # AÑADIR FK categoria_id (1:N)
+│   │   ├── 2026-03-16-150000_Etiquetas.php               # MIGRACIÓN TABLA ETIQUETAS
+│   │   ├── 2026-03-16-160000_PeliculaEtiqueta.php        # TABLA PIVOTE (N:M)
+│   │   └── 2026-03-16-170000_AddImagenToPeliculas.php    # AÑADIR CAMPO imagen
 │   └── Seeds/
 │       ├── PeliculaSeeder.php        # DATOS DE PRUEBA: 5 PELÍCULAS
 │       ├── CategoriaSeeder.php       # DATOS DE PRUEBA: 10 CATEGORÍAS
-│       └── UsuarioSeeder.php         # DATOS DE PRUEBA: 3 USUARIOS (ADMIN + NORMALES)
+│       ├── UsuarioSeeder.php         # DATOS DE PRUEBA: 3 USUARIOS (ADMIN + NORMALES)
+│       └── EtiquetaSeeder.php        # DATOS DE PRUEBA: 8 ETIQUETAS
 ├── Filters/
 │   ├── AuthFilter.php                # FILTRO: VERIFICA QUE EL USUARIO ESTÉ LOGUEADO
 │   └── AdminFilter.php               # FILTRO: VERIFICA QUE EL USUARIO SEA ADMIN
 ├── Models/
-│   ├── PeliculaModel.php             # MODELO PELÍCULAS (CON VALIDACIÓN Y MENSAJES CUSTOM)
+│   ├── PeliculaModel.php             # MODELO PELÍCULAS (CON JOIN CATEGORÍA Y VALIDACIÓN)
 │   ├── CategoriaModel.php            # MODELO CATEGORÍAS (CON VALIDACIÓN, UNIQUE Y MENSAJES)
+│   ├── EtiquetaModel.php             # MODELO ETIQUETAS (CON VALIDACIÓN Y UNIQUE)
+│   ├── PeliculaEtiquetaModel.php     # MODELO TABLA PIVOTE (SINCRONIZAR RELACIÓN N:M)
 │   └── UsuarioModel.php              # MODELO USUARIOS (CON HASH BCRYPT AUTOMÁTICO)
 └── Views/
     ├── layout/
     │   └── main.php                  # LAYOUT PRINCIPAL CON NAVBAR DINÁMICA (LOGIN/LOGOUT)
     ├── peliculas/
-    │   ├── index.php                 # LISTADO DE PELÍCULAS
-    │   ├── create.php                # FORMULARIO CREAR PELÍCULA
-    │   └── edit.php                  # FORMULARIO EDITAR PELÍCULA
+    │   ├── index.php                 # LISTADO DE PELÍCULAS (CON IMAGEN Y CATEGORÍA)
+    │   ├── create.php                # FORMULARIO CREAR (SELECT CATEGORÍA + CHECKBOXES ETIQUETAS + IMAGEN)
+    │   └── edit.php                  # FORMULARIO EDITAR (PRECARGADO CON RELACIONES E IMAGEN)
+    ├── etiquetas/
+    │   ├── index.php                 # LISTADO DE ETIQUETAS
+    │   ├── create.php                # FORMULARIO CREAR ETIQUETA
+    │   └── edit.php                  # FORMULARIO EDITAR ETIQUETA
     ├── categorias/
     │   ├── index.php                 # LISTADO DE CATEGORÍAS
     │   ├── create.php                # FORMULARIO CREAR CATEGORÍA
@@ -140,6 +152,7 @@ database.default.port = 3306
 > ddev exec php spark db:seed PeliculaSeeder
 > ddev exec php spark db:seed CategoriaSeeder
 > ddev exec php spark db:seed UsuarioSeeder
+> ddev exec php spark db:seed EtiquetaSeeder
 ```
 
 > [!IMPORTANT]
@@ -699,6 +712,255 @@ session()->set([
 
 ---
 
+## `SECCIÓN 14: RELACIÓN UNO A MUCHOS (1:N) 🔗`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE CREA LA RELACIÓN ENTRE PELÍCULAS Y CATEGORÍAS. UNA CATEGORÍA PUEDE TENER MUCHAS PELÍCULAS, PERO CADA PELÍCULA SOLO PERTENECE A UNA CATEGORÍA. ESTO SE IMPLEMENTA AÑADIENDO UNA CLAVE FORÁNEA `categoria_id` A LA TABLA PELICULAS***
+
+### `MIGRACIÓN: AÑADIR categoria_id A PELICULAS`
+
+```bash
+# CREAR LA MIGRACIÓN QUE AÑADE LA COLUMNA
+> ddev exec php spark make:migration AddCategoriaIdToPeliculas
+
+# EJECUTAR LA MIGRACIÓN
+> ddev exec php spark migrate
+```
+
+***LA MIGRACIÓN AÑADE:***
+
+```php
+// COLUMNA categoria_id: REFERENCIA A LA TABLA CATEGORIAS
+'categoria_id' => [
+    'type'       => 'INT',
+    'constraint' => 11,
+    'unsigned'   => true,
+    'null'       => true,        // PUEDE SER NULO (PELÍCULA SIN CATEGORÍA)
+    'after'      => 'descripcion', // SE AÑADE DESPUÉS DE descripcion
+],
+```
+
+### `JOIN EN EL MODELO`
+
+***PARA TRAER EL NOMBRE DE LA CATEGORÍA JUNTO CON CADA PELÍCULA, USAMOS UN LEFT JOIN:***
+
+```php
+public function getPeliculasConCategoria()
+{
+    return $this->select('peliculas.*, categorias.titulo AS categoria_nombre')
+                 ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left')
+                 ->orderBy('peliculas.id', 'DESC')
+                 ->findAll();
+}
+```
+
+### `SELECT EN EL FORMULARIO`
+
+***EN LAS VISTAS DE CREAR/EDITAR PELÍCULA SE AÑADE UN SELECT DESPLEGABLE CON TODAS LAS CATEGORÍAS:***
+
+```php
+<select class="form-select" name="categoria_id">
+    <option value="">-- Seleccionar categoría --</option>
+    <?php foreach ($categorias as $categoria): ?>
+        <option value="<?= $categoria['id'] ?>"><?= esc($categoria['titulo']) ?></option>
+    <?php endforeach; ?>
+</select>
+```
+
+---
+
+## `SECCIÓN 15: RELACIÓN MUCHOS A MUCHOS (N:M) - ETIQUETAS 🏷️`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE CREAN LAS ETIQUETAS (TAGS) Y LA RELACIÓN MUCHOS A MUCHOS CON PELÍCULAS. UNA PELÍCULA PUEDE TENER MUCHAS ETIQUETAS Y UNA ETIQUETA PUEDE ESTAR EN MUCHAS PELÍCULAS. ESTO REQUIERE UNA TABLA PIVOTE INTERMEDIA***
+
+### `DIAGRAMA DE LA RELACIÓN N:M`
+
+```
+PELÍCULAS ──────── pelicula_etiqueta ──────── ETIQUETAS
+(id, titulo)       (pelicula_id, etiqueta_id)  (id, nombre)
+
+Ej: "Matrix"  ─── pelicula_id=1, etiqueta_id=1 ─── "Clásico"
+    "Matrix"  ─── pelicula_id=1, etiqueta_id=3 ─── "Taquillera"
+    "Coco"    ─── pelicula_id=5, etiqueta_id=6 ─── "Infantil"
+```
+
+### `MIGRACIONES`
+
+```bash
+# CREAR LA TABLA ETIQUETAS
+> ddev exec php spark make:migration Etiquetas
+
+# CREAR LA TABLA PIVOTE pelicula_etiqueta
+> ddev exec php spark make:migration PeliculaEtiqueta
+
+# EJECUTAR LAS MIGRACIONES
+> ddev exec php spark migrate
+```
+
+### `MODELO PeliculaEtiquetaModel (TABLA PIVOTE)`
+
+***EL MODELO DE LA TABLA PIVOTE TIENE DOS MÉTODOS CLAVE:***
+
+```php
+// OBTENER LAS ETIQUETAS ASIGNADAS A UNA PELÍCULA (DEVUELVE ARRAY DE IDs)
+public function getEtiquetasDePelicula($peliculaId)
+{
+    return $this->where('pelicula_id', $peliculaId)
+                 ->findColumn('etiqueta_id') ?? [];
+}
+
+// SINCRONIZAR: BORRAR LAS ANTERIORES Y ASIGNAR LAS NUEVAS
+public function sincronizar($peliculaId, array $etiquetaIds)
+{
+    $this->where('pelicula_id', $peliculaId)->delete();
+    foreach ($etiquetaIds as $etiquetaId) {
+        $this->insert(['pelicula_id' => $peliculaId, 'etiqueta_id' => $etiquetaId]);
+    }
+}
+```
+
+### `CHECKBOXES EN EL FORMULARIO`
+
+***EN LAS VISTAS DE CREAR/EDITAR PELÍCULA SE AÑADEN CHECKBOXES PARA SELECCIONAR ETIQUETAS:***
+
+```php
+<?php foreach ($etiquetas as $etiqueta): ?>
+    <input type="checkbox" name="etiquetas[]" value="<?= $etiqueta['id'] ?>"
+        <?= in_array($etiqueta['id'], $etiquetasSeleccionadas ?? []) ? 'checked' : '' ?>>
+    <?= esc($etiqueta['nombre']) ?>
+<?php endforeach; ?>
+```
+
+### `CRUD DE ETIQUETAS`
+
+***SE CREA UN CRUD COMPLETO PARA GESTIONAR ETIQUETAS (CREAR, EDITAR, ELIMINAR) CON SU PROPIO CONTROLADOR, MODELO Y VISTAS***
+
+### `SEEDER DE ETIQUETAS`
+
+```bash
+# EJECUTAR EL SEEDER (INSERTA 8 ETIQUETAS DE PRUEBA)
+> ddev exec php spark db:seed EtiquetaSeeder
+```
+
+***ETIQUETAS INSERTADAS: Clásico, Premiada, Taquillera, Independiente, Recomendada, Infantil, Estreno, Saga***
+
+---
+
+## `SECCIÓN 16: CARGA DE ARCHIVOS (IMÁGENES) 📁`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE IMPLEMENTA LA SUBIDA DE IMÁGENES PARA LAS PELÍCULAS. EL USUARIO PUEDE SUBIR UNA IMAGEN (JPG, PNG, GIF) QUE SE GUARDA EN EL SERVIDOR Y SE MUESTRA EN EL LISTADO Y EN EL FORMULARIO DE EDICIÓN***
+
+### `MIGRACIÓN: AÑADIR CAMPO imagen`
+
+```bash
+# CREAR LA MIGRACIÓN QUE AÑADE LA COLUMNA imagen A PELICULAS
+> ddev exec php spark make:migration AddImagenToPeliculas
+
+# EJECUTAR LA MIGRACIÓN
+> ddev exec php spark migrate
+```
+
+### `CÓMO FUNCIONA LA CARGA DE ARCHIVOS`
+
+```php
+// 1. EL FORMULARIO DEBE TENER enctype="multipart/form-data"
+<form method="POST" enctype="multipart/form-data">
+
+// 2. CAMPO INPUT DE TIPO FILE
+<input type="file" name="imagen" accept="image/*">
+
+// 3. EN EL CONTROLADOR, OBTENEMOS EL ARCHIVO
+$imagen = $this->request->getFile('imagen');
+
+// 4. VALIDAMOS QUE SEA UNA IMAGEN VÁLIDA Y NO SUPERE 2MB
+$reglas = ['imagen' => 'uploaded[imagen]|max_size[imagen,2048]|is_image[imagen]'];
+
+// 5. GENERAMOS UN NOMBRE ALEATORIO PARA EVITAR COLISIONES
+$nuevoNombre = $imagen->getRandomName();
+
+// 6. MOVEMOS LA IMAGEN A public/uploads/peliculas/
+$imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
+
+// 7. GUARDAMOS EL NOMBRE EN LA BD
+$datos['imagen'] = $nuevoNombre;
+```
+
+### `VALIDACIONES DE IMAGEN`
+
+| REGLA | QUÉ HACE |
+|---|---|
+| ***`uploaded[imagen]`*** | ***VERIFICA QUE SE HAYA SUBIDO UN ARCHIVO*** |
+| ***`max_size[imagen,2048]`*** | ***EL ARCHIVO NO PUEDE SUPERAR 2MB (2048 KB)*** |
+| ***`is_image[imagen]`*** | ***VERIFICA QUE SEA UNA IMAGEN REAL*** |
+| ***`mime_in[imagen,image/jpg,image/jpeg,image/png,image/gif]`*** | ***SOLO PERMITE ESTOS FORMATOS*** |
+
+### `ELIMINACIÓN DE IMÁGENES`
+
+***AL EDITAR O ELIMINAR UNA PELÍCULA, LA IMAGEN ANTERIOR SE BORRA DEL SERVIDOR:***
+
+```php
+if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $pelicula['imagen'])) {
+    unlink(FCPATH . 'uploads/peliculas/' . $pelicula['imagen']);
+}
+```
+
+### `CARPETA DE UPLOADS`
+
+***LAS IMÁGENES SE GUARDAN EN `public/uploads/peliculas/`. ESTA CARPETA NO SE SUBE A GIT (SOLO EL `.gitkeep`)***
+
+---
+
+## `SECCIÓN 17: INTEGRACIÓN COMPLETA 🔄`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE INTEGRA TODO LO ANTERIOR: LA API REST AHORA INCLUYE LA CATEGORÍA Y LAS ETIQUETAS EN LAS RESPUESTAS JSON, LA NAVBAR MUESTRA EL ENLACE A ETIQUETAS, Y EL FILTRO AUTH PROTEGE TAMBIÉN LAS RUTAS DE ETIQUETAS***
+
+### `API REST ACTUALIZADA`
+
+***EL ENDPOINT GET /api/peliculas/5 AHORA DEVUELVE LA PELÍCULA CON SUS ETIQUETAS:***
+
+```json
+{
+    "status": 200,
+    "mensaje": "PELÍCULA ENCONTRADA",
+    "datos": {
+        "id": 1,
+        "titulo": "Matrix",
+        "descripcion": "Un hacker descubre la verdad...",
+        "categoria_id": 5,
+        "imagen": "abc123.jpg",
+        "etiquetas": [
+            {"id": 1, "nombre": "Clásico"},
+            {"id": 3, "nombre": "Taquillera"}
+        ]
+    }
+}
+```
+
+### `NAVBAR ACTUALIZADA`
+
+***SE AÑADE EL ENLACE A ETIQUETAS EN LA BARRA DE NAVEGACIÓN (SOLO VISIBLE PARA USUARIOS LOGUEADOS):***
+
+- ***PELÍCULAS → CRUD CON CATEGORÍA, ETIQUETAS E IMAGEN***
+- ***CATEGORÍAS → CRUD INDEPENDIENTE***
+- ***ETIQUETAS → CRUD INDEPENDIENTE (NUEVO)***
+
+### `FILTRO AUTH AMPLIADO`
+
+***EL FILTRO DE AUTENTICACIÓN AHORA PROTEGE TAMBIÉN LAS RUTAS DE ETIQUETAS:***
+
+```php
+'auth' => ['before' => [
+    'peliculas', 'peliculas/*',
+    'categorias', 'categorias/*',
+    'etiquetas', 'etiquetas/*',     // NUEVO
+]],
+```
+
+---
+
 ## `URLS DE ACCESO 🌐`
 
 | URL | DESCRIPCIÓN |
@@ -708,6 +970,7 @@ session()->set([
 | ***https://udemy.ddev.site/auth/registro*** | ***FORMULARIO DE REGISTRO*** |
 | ***https://udemy.ddev.site/peliculas*** | ***CRUD DE PELÍCULAS (REQUIERE LOGIN)*** |
 | ***https://udemy.ddev.site/categorias*** | ***CRUD DE CATEGORÍAS (REQUIERE LOGIN)*** |
+| ***https://udemy.ddev.site/etiquetas*** | ***CRUD DE ETIQUETAS (REQUIERE LOGIN)*** |
 | ***https://udemy.ddev.site/api/peliculas*** | ***API REST PELÍCULAS (JSON)*** |
 | ***https://udemy.ddev.site/api/categorias*** | ***API REST CATEGORÍAS (JSON)*** |
 
@@ -723,6 +986,10 @@ session()->set([
 | ***10*** | ***FILTROS DE SEGURIDAD: AUTHFILTER, ADMINFILTER, REGISTRO EN Config/Filters.php*** |
 | ***11*** | ***AUTENTICACIÓN: LOGIN, REGISTRO, LOGOUT, HASH BCRYPT, SESIONES, ROLES (ADMIN/USUARIO)*** |
 | ***12*** | ***API REST CRUD: ENDPOINTS JSON PARA CATEGORÍAS Y PELÍCULAS CON RESOURCECONTROLLER*** |
+| ***14*** | ***RELACIÓN 1:N: CATEGORÍA → PELÍCULAS CON FK categoria_id Y LEFT JOIN*** |
+| ***15*** | ***RELACIÓN N:M: ETIQUETAS ↔ PELÍCULAS CON TABLA PIVOTE, CRUD ETIQUETAS Y CHECKBOXES*** |
+| ***16*** | ***CARGA DE ARCHIVOS: SUBIDA DE IMÁGENES CON VALIDACIÓN, NOMBRES ALEATORIOS Y ELIMINACIÓN*** |
+| ***17*** | ***INTEGRACIÓN: API CON ETIQUETAS, NAVBAR AMPLIADA, FILTRO AUTH EN ETIQUETAS*** |
 
 ---
 
@@ -736,6 +1003,9 @@ session()->set([
 | ***CREDENCIALES INCORRECTAS CON 123456*** | ***LOS USUARIOS NO EXISTEN EN LA BD*** | ***EJECUTAR EL SEEDER: `ddev exec php spark db:seed UsuarioSeeder`*** |
 | ***REDIRIGE AL LOGIN AL ENTRAR A /peliculas*** | ***ES EL COMPORTAMIENTO CORRECTO (FILTRO AUTH)*** | ***INICIA SESIÓN PRIMERO EN /auth/login*** |
 | ***ERROR 500 AL ACCEDER A LA WEB*** | ***FALTA EL ARCHIVO `.env` O ESTÁ MAL CONFIGURADO*** | ***COPIAR `env` A `.env` Y CONFIGURAR (VER PASO 4)*** |
+| ***`Table 'db.etiquetas' doesn't exist`*** | ***NO SE EJECUTÓ LA MIGRACIÓN DE ETIQUETAS*** | ***`ddev exec php spark migrate`*** |
+| ***NO HAY ETIQUETAS EN LOS CHECKBOXES*** | ***NO SE EJECUTÓ EL SEEDER DE ETIQUETAS*** | ***`ddev exec php spark db:seed EtiquetaSeeder`*** |
+| ***LA IMAGEN NO SE SUBE*** | ***EL FORMULARIO NO TIENE `enctype="multipart/form-data"`*** | ***VERIFICAR QUE EL FORM TENGA ESE ATRIBUTO*** |
 | ***DDEV NO ARRANCA*** | ***DOCKER NO ESTÁ CORRIENDO O WSL ESTÁ APAGADO*** | ***INICIAR DOCKER DESKTOP Y EJECUTAR `ddev start`*** |
 
 ---

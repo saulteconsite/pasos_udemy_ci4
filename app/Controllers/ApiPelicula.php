@@ -4,7 +4,6 @@
 namespace App\Controllers;
 
 // IMPORTAMOS EL CONTROLADOR BASE RESOURCECONTROLLER DE CODEIGNITER
-// RESOURCECONTROLLER FACILITA LA CREACIÓN DE APIs REST CON MÉTODOS PREDEFINIDOS
 use CodeIgniter\RESTful\ResourceController;
 
 // IMPORTAMOS EL MODELO DE PELÍCULAS
@@ -22,11 +21,12 @@ class ApiPelicula extends ResourceController
 
     // =============================================
     // MÉTODO INDEX: OBTENER TODAS LAS PELÍCULAS (GET /api/peliculas)
+    // INCLUYE EL NOMBRE DE LA CATEGORÍA GRACIAS AL JOIN
     // =============================================
     public function index()
     {
-        // OBTENEMOS TODAS LAS PELÍCULAS ORDENADAS POR ID DESCENDENTE
-        $peliculas = $this->model->orderBy('id', 'DESC')->findAll();
+        // USAMOS EL MÉTODO PERSONALIZADO QUE TRAE PELÍCULAS CON CATEGORÍA (JOIN)
+        $peliculas = $this->model->getPeliculasConCategoria();
 
         // DEVOLVEMOS LA RESPUESTA EN FORMATO JSON CON CÓDIGO 200 (OK)
         return $this->respond([
@@ -34,7 +34,7 @@ class ApiPelicula extends ResourceController
             'status'  => 200,
             // INCLUIMOS UN MENSAJE DESCRIPTIVO
             'mensaje' => 'LISTADO DE PELÍCULAS',
-            // INCLUIMOS LOS DATOS DE LAS PELÍCULAS
+            // INCLUIMOS LOS DATOS DE LAS PELÍCULAS (CON CATEGORÍA)
             'datos'   => $peliculas,
         ]);
     }
@@ -49,17 +49,28 @@ class ApiPelicula extends ResourceController
 
         // SI NO EXISTE LA PELÍCULA, DEVOLVEMOS ERROR 404
         if ($pelicula === null) {
-            // failNotFound() DEVUELVE UNA RESPUESTA JSON CON CÓDIGO 404
             return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
         }
 
-        // DEVOLVEMOS LA PELÍCULA ENCONTRADA EN FORMATO JSON CON CÓDIGO 200
+        // OBTENEMOS LAS ETIQUETAS ASIGNADAS A ESTA PELÍCULA (RELACIÓN N:M)
+        $pivote = new \App\Models\PeliculaEtiquetaModel();
+        // OBTENEMOS LOS IDs DE LAS ETIQUETAS
+        $etiquetaIds = $pivote->getEtiquetasDePelicula($id);
+        // SI HAY ETIQUETAS, OBTENEMOS SUS NOMBRES COMPLETOS
+        $etiquetas = [];
+        if (!empty($etiquetaIds)) {
+            $etiquetaModel = new \App\Models\EtiquetaModel();
+            // whereIn() BUSCA REGISTROS CUYO ID ESTÉ EN EL ARRAY
+            $etiquetas = $etiquetaModel->whereIn('id', $etiquetaIds)->findAll();
+        }
+
+        // AÑADIMOS LAS ETIQUETAS AL ARRAY DE LA PELÍCULA
+        $pelicula['etiquetas'] = $etiquetas;
+
+        // DEVOLVEMOS LA PELÍCULA CON SUS ETIQUETAS EN FORMATO JSON
         return $this->respond([
-            // INDICAMOS QUE LA PETICIÓN FUE EXITOSA
             'status'  => 200,
-            // INCLUIMOS UN MENSAJE DESCRIPTIVO
             'mensaje' => 'PELÍCULA ENCONTRADA',
-            // INCLUIMOS LOS DATOS DE LA PELÍCULA
             'datos'   => $pelicula,
         ]);
     }
@@ -72,24 +83,22 @@ class ApiPelicula extends ResourceController
         // RECOGEMOS LOS DATOS ENVIADOS EN LA PETICIÓN (JSON O FORM-DATA)
         $datos = [
             // OBTENEMOS EL CAMPO 'titulo' DE LA PETICIÓN
-            'titulo'      => $this->request->getVar('titulo'),
+            'titulo'       => $this->request->getVar('titulo'),
             // OBTENEMOS EL CAMPO 'descripcion' DE LA PETICIÓN
-            'descripcion' => $this->request->getVar('descripcion'),
+            'descripcion'  => $this->request->getVar('descripcion'),
+            // OBTENEMOS EL CAMPO 'categoria_id' DE LA PETICIÓN (RELACIÓN 1:N)
+            'categoria_id' => $this->request->getVar('categoria_id') ?: null,
         ];
 
         // INTENTAMOS GUARDAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN, DEVUELVE FALSE
         if (!$this->model->save($datos)) {
-            // failValidationErrors() DEVUELVE UNA RESPUESTA JSON CON CÓDIGO 400 Y LOS ERRORES
             return $this->failValidationErrors($this->model->errors());
         }
 
         // DEVOLVEMOS UNA RESPUESTA JSON CON CÓDIGO 201 (CREATED)
         return $this->respondCreated([
-            // INDICAMOS QUE EL RECURSO FUE CREADO EXITOSAMENTE
             'status'  => 201,
-            // INCLUIMOS UN MENSAJE DE ÉXITO
             'mensaje' => 'PELÍCULA CREADA CORRECTAMENTE',
-            // INCLUIMOS EL ID DE LA NUEVA PELÍCULA
             'id'      => $this->model->getInsertID(),
         ]);
     }
@@ -102,31 +111,26 @@ class ApiPelicula extends ResourceController
         // BUSCAMOS LA PELÍCULA POR SU ID
         $pelicula = $this->model->find($id);
 
-        // SI NO EXISTE LA PELÍCULA, DEVOLVEMOS ERROR 404
+        // SI NO EXISTE, DEVOLVEMOS ERROR 404
         if ($pelicula === null) {
-            // failNotFound() DEVUELVE UNA RESPUESTA JSON CON CÓDIGO 404
             return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
         }
 
-        // RECOGEMOS LOS DATOS ENVIADOS EN LA PETICIÓN (JSON O FORM-DATA)
+        // RECOGEMOS LOS DATOS ENVIADOS EN LA PETICIÓN
         $datos = [
-            // OBTENEMOS EL CAMPO 'titulo' DE LA PETICIÓN
-            'titulo'      => $this->request->getVar('titulo'),
-            // OBTENEMOS EL CAMPO 'descripcion' DE LA PETICIÓN
-            'descripcion' => $this->request->getVar('descripcion'),
+            'titulo'       => $this->request->getVar('titulo'),
+            'descripcion'  => $this->request->getVar('descripcion'),
+            'categoria_id' => $this->request->getVar('categoria_id') ?: null,
         ];
 
-        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN, DEVUELVE FALSE
+        // INTENTAMOS ACTUALIZAR
         if (!$this->model->update($id, $datos)) {
-            // failValidationErrors() DEVUELVE UNA RESPUESTA JSON CON CÓDIGO 400 Y LOS ERRORES
             return $this->failValidationErrors($this->model->errors());
         }
 
-        // DEVOLVEMOS UNA RESPUESTA JSON CON CÓDIGO 200 (OK)
+        // DEVOLVEMOS RESPUESTA DE ÉXITO
         return $this->respond([
-            // INDICAMOS QUE LA PETICIÓN FUE EXITOSA
             'status'  => 200,
-            // INCLUIMOS UN MENSAJE DE ÉXITO
             'mensaje' => 'PELÍCULA ACTUALIZADA CORRECTAMENTE',
         ]);
     }
@@ -139,20 +143,26 @@ class ApiPelicula extends ResourceController
         // BUSCAMOS LA PELÍCULA POR SU ID
         $pelicula = $this->model->find($id);
 
-        // SI NO EXISTE LA PELÍCULA, DEVOLVEMOS ERROR 404
+        // SI NO EXISTE, DEVOLVEMOS ERROR 404
         if ($pelicula === null) {
-            // failNotFound() DEVUELVE UNA RESPUESTA JSON CON CÓDIGO 404
             return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
         }
+
+        // SI TIENE IMAGEN, LA ELIMINAMOS DEL SERVIDOR
+        if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $pelicula['imagen'])) {
+            unlink(FCPATH . 'uploads/peliculas/' . $pelicula['imagen']);
+        }
+
+        // ELIMINAMOS LAS ETIQUETAS ASOCIADAS EN LA TABLA PIVOTE
+        $pivote = new \App\Models\PeliculaEtiquetaModel();
+        $pivote->where('pelicula_id', $id)->delete();
 
         // ELIMINAMOS LA PELÍCULA DE LA BASE DE DATOS
         $this->model->delete($id);
 
-        // DEVOLVEMOS UNA RESPUESTA JSON CON CÓDIGO 200 (OK)
+        // DEVOLVEMOS RESPUESTA DE ÉXITO
         return $this->respondDeleted([
-            // INDICAMOS QUE EL RECURSO FUE ELIMINADO EXITOSAMENTE
             'status'  => 200,
-            // INCLUIMOS UN MENSAJE DE ÉXITO
             'mensaje' => 'PELÍCULA ELIMINADA CORRECTAMENTE',
         ]);
     }
