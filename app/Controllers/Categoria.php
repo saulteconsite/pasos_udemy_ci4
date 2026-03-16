@@ -44,20 +44,17 @@ class Categoria extends BaseController
     // MÉTODO STORE: PROCESA EL FORMULARIO Y GUARDA LA CATEGORÍA EN LA BD
     public function store()
     {
-        // DEFINIMOS LAS REGLAS DE VALIDACIÓN PARA EL CAMPO TITULO
-        $reglas = [
-            'titulo' => 'required|min_length[3]|max_length[100]',
+        // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
+        $datos = [
+            // OBTENEMOS EL CAMPO 'titulo' DEL POST
+            'titulo' => $this->request->getPost('titulo'),
         ];
 
-        // SI LA VALIDACIÓN FALLA, REDIRIGIMOS AL FORMULARIO CON LOS ERRORES
-        if (!$this->validate($reglas)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        // INTENTAMOS GUARDAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        if (!$this->categoriaModel->save($datos)) {
+            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN DEL MODELO
+            return redirect()->back()->withInput()->with('errors', $this->categoriaModel->errors());
         }
-
-        // GUARDAMOS LA NUEVA CATEGORÍA EN LA BASE DE DATOS
-        $this->categoriaModel->save([
-            'titulo' => $this->request->getPost('titulo'),
-        ]);
 
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
         return redirect()->to(base_url('/categorias'))->with('mensaje', 'Categoría creada correctamente');
@@ -93,20 +90,17 @@ class Categoria extends BaseController
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('No se encontró la categoría');
         }
 
-        // DEFINIMOS LAS REGLAS DE VALIDACIÓN
-        $reglas = [
-            'titulo' => 'required|min_length[3]|max_length[100]',
+        // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
+        $datos = [
+            // OBTENEMOS EL CAMPO 'titulo' DEL POST
+            'titulo' => $this->request->getPost('titulo'),
         ];
 
-        // SI LA VALIDACIÓN FALLA, REDIRIGIMOS CON LOS ERRORES
-        if (!$this->validate($reglas)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        if (!$this->categoriaModel->update($id, $datos)) {
+            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN DEL MODELO
+            return redirect()->back()->withInput()->with('errors', $this->categoriaModel->errors());
         }
-
-        // ACTUALIZAMOS LA CATEGORÍA EN LA BASE DE DATOS
-        $this->categoriaModel->update($id, [
-            'titulo' => $this->request->getPost('titulo'),
-        ]);
 
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
         return redirect()->to(base_url('/categorias'))->with('mensaje', 'Categoría actualizada correctamente');

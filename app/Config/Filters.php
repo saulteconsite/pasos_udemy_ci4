@@ -1,8 +1,11 @@
 <?php
 
+// ESPACIO DE NOMBRES PARA LA CONFIGURACIÓN DE LA APP
 namespace Config;
 
+// IMPORTAMOS LA CLASE BASE DE FILTROS DE CODEIGNITER
 use CodeIgniter\Config\Filters as BaseFilters;
+// IMPORTAMOS LOS FILTROS PROPIOS DE CODEIGNITER
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
 use CodeIgniter\Filters\DebugToolbar;
@@ -12,99 +15,89 @@ use CodeIgniter\Filters\InvalidChars;
 use CodeIgniter\Filters\PageCache;
 use CodeIgniter\Filters\PerformanceMetrics;
 use CodeIgniter\Filters\SecureHeaders;
+// IMPORTAMOS NUESTROS FILTROS PERSONALIZADOS
+use App\Filters\AuthFilter;
+use App\Filters\AdminFilter;
 
+// CLASE DE CONFIGURACIÓN DE FILTROS DE LA APLICACIÓN
 class Filters extends BaseFilters
 {
-    /**
-     * Configures aliases for Filter classes to
-     * make reading things nicer and simpler.
-     *
-     * @var array<string, class-string|list<class-string>>
-     *
-     * [filter_name => classname]
-     * or [filter_name => [classname1, classname2, ...]]
-     */
+    // ALIASES: NOMBRES CORTOS PARA REFERENCIAR LOS FILTROS EN LAS RUTAS
+    // EN VEZ DE ESCRIBIR App\Filters\AuthFilter, ESCRIBIMOS 'auth'
     public array $aliases = [
+        // FILTRO CSRF: PROTEGE CONTRA ATAQUES DE FALSIFICACIÓN DE PETICIONES
         'csrf'          => CSRF::class,
+        // FILTRO TOOLBAR: BARRA DE DEPURACIÓN DE CODEIGNITER
         'toolbar'       => DebugToolbar::class,
+        // FILTRO HONEYPOT: TRAMPA PARA BOTS QUE RELLENAN FORMULARIOS OCULTOS
         'honeypot'      => Honeypot::class,
+        // FILTRO INVALIDCHARS: BLOQUEA CARACTERES NO VÁLIDOS EN LA PETICIÓN
         'invalidchars'  => InvalidChars::class,
+        // FILTRO SECUREHEADERS: AÑADE CABECERAS DE SEGURIDAD A LA RESPUESTA
         'secureheaders' => SecureHeaders::class,
+        // FILTRO CORS: GESTIONA LOS PERMISOS DE CROSS-ORIGIN RESOURCE SHARING
         'cors'          => Cors::class,
+        // FILTRO FORCEHTTPS: FUERZA QUE TODAS LAS PETICIONES USEN HTTPS
         'forcehttps'    => ForceHTTPS::class,
+        // FILTRO PAGECACHE: ALMACENA EN CACHÉ LAS PÁGINAS PARA MEJORAR RENDIMIENTO
         'pagecache'     => PageCache::class,
+        // FILTRO PERFORMANCE: MÉTRICAS DE RENDIMIENTO DE LA APLICACIÓN
         'performance'   => PerformanceMetrics::class,
+        // FILTRO AUTH: NUESTRO FILTRO PERSONALIZADO QUE VERIFICA SI EL USUARIO ESTÁ LOGUEADO
+        'auth'          => AuthFilter::class,
+        // FILTRO ADMIN: NUESTRO FILTRO PERSONALIZADO QUE VERIFICA SI EL USUARIO ES ADMINISTRADOR
+        'admin'         => AdminFilter::class,
     ];
 
-    /**
-     * List of special required filters.
-     *
-     * The filters listed here are special. They are applied before and after
-     * other kinds of filters, and always applied even if a route does not exist.
-     *
-     * Filters set by default provide framework functionality. If removed,
-     * those functions will no longer work.
-     *
-     * @see https://codeigniter.com/user_guide/incoming/filters.html#provided-filters
-     *
-     * @var array{before: list<string>, after: list<string>}
-     */
+    // FILTROS REQUERIDOS: SE EJECUTAN SIEMPRE, INCLUSO SI LA RUTA NO EXISTE
+    // SON ESENCIALES PARA EL FUNCIONAMIENTO DEL FRAMEWORK
     public array $required = [
         'before' => [
-            'forcehttps', // Force Global Secure Requests
-            'pagecache',  // Web Page Caching
+            // FORZAR HTTPS EN TODAS LAS PETICIONES
+            'forcehttps',
+            // CACHÉ DE PÁGINAS WEB
+            'pagecache',
         ],
         'after' => [
-            'pagecache',   // Web Page Caching
-            'performance', // Performance Metrics
-            'toolbar',     // Debug Toolbar
+            // CACHÉ DE PÁGINAS WEB
+            'pagecache',
+            // MÉTRICAS DE RENDIMIENTO
+            'performance',
+            // BARRA DE DEPURACIÓN
+            'toolbar',
         ],
     ];
 
-    /**
-     * List of filter aliases that are always
-     * applied before and after every request.
-     *
-     * @var array{
-     *     before: array<string, array{except: list<string>|string}>|list<string>,
-     *     after: array<string, array{except: list<string>|string}>|list<string>
-     * }
-     */
+    // FILTROS GLOBALES: SE APLICAN A TODAS LAS PETICIONES ANTES Y DESPUÉS
     public array $globals = [
         'before' => [
+            // DESCOMENTAR PARA ACTIVAR GLOBALMENTE:
             // 'honeypot',
             // 'csrf',
             // 'invalidchars',
         ],
         'after' => [
+            // DESCOMENTAR PARA ACTIVAR GLOBALMENTE:
             // 'honeypot',
             // 'secureheaders',
         ],
     ];
 
-    /**
-     * List of filter aliases that works on a
-     * particular HTTP method (GET, POST, etc.).
-     *
-     * Example:
-     * 'POST' => ['foo', 'bar']
-     *
-     * If you use this, you should disable auto-routing because auto-routing
-     * permits any HTTP method to access a controller. Accessing the controller
-     * with a method you don't expect could bypass the filter.
-     *
-     * @var array<string, list<string>>
-     */
+    // FILTROS POR MÉTODO HTTP: SE APLICAN SEGÚN EL TIPO DE PETICIÓN (GET, POST, ETC.)
     public array $methods = [];
 
-    /**
-     * List of filter aliases that should run on any
-     * before or after URI patterns.
-     *
-     * Example:
-     * 'isLoggedIn' => ['before' => ['account/*', 'profiles/*']]
-     *
-     * @var array<string, array<string, list<string>>>
-     */
-    public array $filters = [];
+    // FILTROS POR PATRÓN DE URI: SE APLICAN A RUTAS QUE COINCIDAN CON EL PATRÓN
+    // AQUÍ DEFINIMOS QUÉ RUTAS REQUIEREN AUTENTICACIÓN
+    public array $filters = [
+        // EL FILTRO 'auth' SE EJECUTA ANTES DE ACCEDER A ESTAS RUTAS
+        // SI EL USUARIO NO ESTÁ LOGUEADO, SERÁ REDIRIGIDO AL LOGIN
+        'auth' => ['before' => [
+            // PROTEGEMOS TODAS LAS RUTAS DE PELÍCULAS (LISTADO, CREAR, EDITAR, ELIMINAR)
+            'peliculas',
+            'peliculas/*',
+            // PROTEGEMOS TODAS LAS RUTAS DE CATEGORÍAS (LISTADO, CREAR, EDITAR, ELIMINAR)
+            'categorias',
+            'categorias/*',
+        ]],
+    ];
 }

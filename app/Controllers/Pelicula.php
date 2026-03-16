@@ -46,22 +46,19 @@ class Pelicula extends BaseController
     // MÉTODO STORE: PROCESA EL FORMULARIO Y GUARDA LA PELÍCULA EN LA BD
     public function store()
     {
-        // DEFINIMOS LAS REGLAS DE VALIDACIÓN PARA LOS CAMPOS
-        $reglas = [
-            'titulo'      => 'required|min_length[3]|max_length[150]',
-            'descripcion' => 'permit_empty|max_length[5000]',
+        // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
+        $datos = [
+            // OBTENEMOS EL CAMPO 'titulo' DEL POST
+            'titulo'      => $this->request->getPost('titulo'),
+            // OBTENEMOS EL CAMPO 'descripcion' DEL POST
+            'descripcion' => $this->request->getPost('descripcion'),
         ];
 
-        // SI LA VALIDACIÓN FALLA, REDIRIGIMOS AL FORMULARIO CON LOS ERRORES
-        if (!$this->validate($reglas)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        // INTENTAMOS GUARDAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        if (!$this->peliculaModel->save($datos)) {
+            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN DEL MODELO
+            return redirect()->back()->withInput()->with('errors', $this->peliculaModel->errors());
         }
-
-        // GUARDAMOS LA NUEVA PELÍCULA EN LA BASE DE DATOS
-        $this->peliculaModel->save([
-            'titulo'      => $this->request->getPost('titulo'),
-            'descripcion' => $this->request->getPost('descripcion'),
-        ]);
 
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
         return redirect()->to(base_url('/peliculas'))->with('mensaje', 'Película creada correctamente');
@@ -97,22 +94,19 @@ class Pelicula extends BaseController
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('No se encontró la película');
         }
 
-        // DEFINIMOS LAS REGLAS DE VALIDACIÓN
-        $reglas = [
-            'titulo'      => 'required|min_length[3]|max_length[150]',
-            'descripcion' => 'permit_empty|max_length[5000]',
+        // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
+        $datos = [
+            // OBTENEMOS EL CAMPO 'titulo' DEL POST
+            'titulo'      => $this->request->getPost('titulo'),
+            // OBTENEMOS EL CAMPO 'descripcion' DEL POST
+            'descripcion' => $this->request->getPost('descripcion'),
         ];
 
-        // SI LA VALIDACIÓN FALLA, REDIRIGIMOS CON LOS ERRORES
-        if (!$this->validate($reglas)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        if (!$this->peliculaModel->update($id, $datos)) {
+            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN DEL MODELO
+            return redirect()->back()->withInput()->with('errors', $this->peliculaModel->errors());
         }
-
-        // ACTUALIZAMOS LA PELÍCULA EN LA BASE DE DATOS
-        $this->peliculaModel->update($id, [
-            'titulo'      => $this->request->getPost('titulo'),
-            'descripcion' => $this->request->getPost('descripcion'),
-        ]);
 
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
         return redirect()->to(base_url('/peliculas'))->with('mensaje', 'Película actualizada correctamente');
