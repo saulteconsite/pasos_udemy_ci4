@@ -3,7 +3,7 @@
 ![img](https://i.pinimg.com/originals/a1/f8/be/a1f8be54a08a324c83e747a8fa5ed660.gif)
 
 > [!NOTE]
-> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 17 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS, CATEGORÍAS Y ETIQUETAS, RELACIONES UNO A MUCHOS (1:N) Y MUCHOS A MUCHOS (N:M), CARGA DE ARCHIVOS (IMÁGENES), VALIDACIONES AVANZADAS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO) Y UNA API REST COMPLETA. TODO DESPLEGADO CON DDEV EN WSL***
+> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 18 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS, CATEGORÍAS Y ETIQUETAS, RELACIONES UNO A MUCHOS (1:N) Y MUCHOS A MUCHOS (N:M), CARGA DE ARCHIVOS (IMÁGENES), VALIDACIONES AVANZADAS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO), API REST COMPLETA Y LISTADOS PAGINADOS CON FILTROS AVANZADOS (BÚSQUEDA, CATEGORÍA, ETIQUETA Y LIKE AGRUPADO). TODO DESPLEGADO CON DDEV EN WSL***
 
 ---
 
@@ -12,8 +12,9 @@
 ```
 app/
 ├── Config/
-│   ├── Routes.php                    # RUTAS CRUD, AUTH, ETIQUETAS Y API REST
-│   └── Filters.php                   # CONFIGURACIÓN DE FILTROS (AUTH, ADMIN)
+│   ├── Routes.php                    # RUTAS CRUD, AUTH, ETIQUETAS Y API REST (app/Config/Routes.php)
+│   ├── Filters.php                   # CONFIGURACIÓN DE FILTROS AUTH Y ADMIN (app/Config/Filters.php)
+│   └── Pager.php                     # CONFIGURACIÓN DE PAGINACIÓN (PLANTILLAS BOOTSTRAP)
 ├── Controllers/
 │   ├── Pelicula.php                  # CONTROLADOR CRUD PELÍCULAS (CON CATEGORÍA, ETIQUETAS E IMAGEN)
 │   ├── Categoria.php                 # CONTROLADOR CRUD CATEGORÍAS (WEB)
@@ -39,7 +40,7 @@ app/
 │   ├── AuthFilter.php                # FILTRO: VERIFICA QUE EL USUARIO ESTÉ LOGUEADO
 │   └── AdminFilter.php               # FILTRO: VERIFICA QUE EL USUARIO SEA ADMIN
 ├── Models/
-│   ├── PeliculaModel.php             # MODELO PELÍCULAS (CON JOIN CATEGORÍA Y VALIDACIÓN)
+│   ├── PeliculaModel.php             # MODELO PELÍCULAS (JOIN CATEGORÍA + FILTROS PAGINADOS)
 │   ├── CategoriaModel.php            # MODELO CATEGORÍAS (CON VALIDACIÓN, UNIQUE Y MENSAJES)
 │   ├── EtiquetaModel.php             # MODELO ETIQUETAS (CON VALIDACIÓN Y UNIQUE)
 │   ├── PeliculaEtiquetaModel.php     # MODELO TABLA PIVOTE (SINCRONIZAR RELACIÓN N:M)
@@ -48,15 +49,15 @@ app/
     ├── layout/
     │   └── main.php                  # LAYOUT PRINCIPAL CON NAVBAR DINÁMICA (LOGIN/LOGOUT)
     ├── peliculas/
-    │   ├── index.php                 # LISTADO DE PELÍCULAS (CON IMAGEN Y CATEGORÍA)
+    │   ├── index.php                 # LISTADO PAGINADO CON FILTROS (BÚSQUEDA, CATEGORÍA, ETIQUETA)
     │   ├── create.php                # FORMULARIO CREAR (SELECT CATEGORÍA + CHECKBOXES ETIQUETAS + IMAGEN)
     │   └── edit.php                  # FORMULARIO EDITAR (PRECARGADO CON RELACIONES E IMAGEN)
     ├── etiquetas/
-    │   ├── index.php                 # LISTADO DE ETIQUETAS
+    │   ├── index.php                 # LISTADO PAGINADO CON BÚSQUEDA
     │   ├── create.php                # FORMULARIO CREAR ETIQUETA
     │   └── edit.php                  # FORMULARIO EDITAR ETIQUETA
     ├── categorias/
-    │   ├── index.php                 # LISTADO DE CATEGORÍAS
+    │   ├── index.php                 # LISTADO PAGINADO CON BÚSQUEDA
     │   ├── create.php                # FORMULARIO CREAR CATEGORÍA
     │   └── edit.php                  # FORMULARIO EDITAR CATEGORÍA
     └── auth/
@@ -961,6 +962,200 @@ if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $
 
 ---
 
+## `SECCIÓN 18: LISTADO PAGINADO Y FILTROS AVANZADOS 🔍`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE IMPLEMENTA LA PAGINACIÓN EN TODOS LOS LISTADOS (PELÍCULAS, CATEGORÍAS Y ETIQUETAS) Y SE AÑADE UN SISTEMA DE FILTROS AVANZADO PARA PELÍCULAS QUE PERMITE BUSCAR POR TEXTO, FILTRAR POR CATEGORÍA, FILTRAR POR ETIQUETA Y AGRUPAR CONDICIONES LIKE CON groupStart()/groupEnd()***
+
+### `¿QUÉ ES LA PAGINACIÓN?`
+
+***LA PAGINACIÓN DIVIDE LOS RESULTADOS EN PÁGINAS PARA NO CARGAR TODOS LOS REGISTROS DE GOLPE. CODEIGNITER 4 LO HACE AUTOMÁTICAMENTE CON EL MÉTODO `paginate()` DEL MODELO:***
+
+```php
+// SIN PAGINACIÓN: TRAE TODOS LOS REGISTROS (LENTO SI HAY MILES)
+$peliculas = $this->peliculaModel->findAll();
+
+// CON PAGINACIÓN: TRAE SOLO 5 REGISTROS POR PÁGINA (RÁPIDO SIEMPRE)
+$peliculas = $this->peliculaModel->paginate(5);
+$pager = $this->peliculaModel->pager;  // OBJETO PARA GENERAR ENLACES DE PÁGINA
+```
+
+### `MÉTODO getPeliculasFiltradas() EN EL MODELO`
+
+***ARCHIVO: `app/Models/PeliculaModel.php`***
+
+***ESTE MÉTODO CONSTRUYE UNA CONSULTA SQL DINÁMICA SEGÚN LOS FILTROS RECIBIDOS:***
+
+```php
+public function getPeliculasFiltradas($filtros = [], $porPagina = 5)
+{
+    // 1. SELECT CON JOIN A CATEGORÍAS (IGUAL QUE getPeliculasConCategoria)
+    $builder = $this->select('peliculas.*, categorias.titulo AS categoria_nombre')
+                    ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left');
+
+    // 2. FILTRO BÚSQUEDA: LIKE AGRUPADO CON groupStart()/groupEnd()
+    if (!empty($filtros['busqueda'])) {
+        $builder->groupStart()
+                    ->like('peliculas.titulo', $filtros['busqueda'], 'both')
+                    ->orLike('peliculas.descripcion', $filtros['busqueda'], 'both')
+                ->groupEnd();
+    }
+
+    // 3. FILTRO POR CATEGORÍA: WHERE exacto
+    if (!empty($filtros['categoria_id'])) {
+        $builder->where('peliculas.categoria_id', $filtros['categoria_id']);
+    }
+
+    // 4. FILTRO POR ETIQUETA: JOIN con tabla pivote
+    if (!empty($filtros['etiqueta_id'])) {
+        $builder->join('pelicula_etiqueta', 'pelicula_etiqueta.pelicula_id = peliculas.id', 'inner')
+                ->where('pelicula_etiqueta.etiqueta_id', $filtros['etiqueta_id']);
+    }
+
+    // 5. PAGINAR RESULTADOS
+    return $builder->orderBy('peliculas.id', 'DESC')->paginate($porPagina);
+}
+```
+
+### `¿QUÉ ES EL LIKE AGRUPADO (groupStart/groupEnd)?`
+
+***CUANDO COMBINAMOS LIKE CON OTROS FILTROS, DEBEMOS AGRUPAR LOS LIKE DENTRO DE PARÉNTESIS PARA QUE LA LÓGICA SQL SEA CORRECTA:***
+
+```sql
+-- SIN AGRUPAR (INCORRECTO): EL OR AFECTA A TODO
+WHERE titulo LIKE '%matrix%' OR descripcion LIKE '%matrix%' AND categoria_id = 5
+-- ESTO SE INTERPRETA COMO: titulo LIKE '%matrix%' OR (descripcion LIKE '%matrix%' AND categoria_id = 5)
+
+-- CON AGRUPAR (CORRECTO): EL OR SOLO AFECTA AL GRUPO
+WHERE (titulo LIKE '%matrix%' OR descripcion LIKE '%matrix%') AND categoria_id = 5
+-- ESTO SE INTERPRETA COMO: (coincide en titulo O descripcion) Y además la categoría es 5
+```
+
+***EN CODEIGNITER 4:***
+
+```php
+// groupStart() = ABRE PARÉNTESIS → (
+// groupEnd() = CIERRA PARÉNTESIS → )
+$builder->groupStart()
+            ->like('peliculas.titulo', $filtros['busqueda'], 'both')
+            ->orLike('peliculas.descripcion', $filtros['busqueda'], 'both')
+        ->groupEnd();
+```
+
+### `CONTROLADOR PELICULA::INDEX() CON FILTROS`
+
+***ARCHIVO: `app/Controllers/Pelicula.php`***
+
+```php
+public function index()
+{
+    // RECOGEMOS LOS FILTROS DEL QUERY STRING (?busqueda=matrix&categoria_id=5)
+    $filtros = [
+        'busqueda'     => $this->request->getGet('busqueda'),
+        'categoria_id' => $this->request->getGet('categoria_id'),
+        'etiqueta_id'  => $this->request->getGet('etiqueta_id'),
+    ];
+
+    // OBTENEMOS PELÍCULAS FILTRADAS Y PAGINADAS (5 POR PÁGINA)
+    $datos['peliculas'] = $this->peliculaModel->getPeliculasFiltradas($filtros, 5);
+
+    // OBJETO PAGER PARA LOS ENLACES DE PAGINACIÓN
+    $datos['pager'] = $this->peliculaModel->pager;
+
+    // CATEGORÍAS Y ETIQUETAS PARA LOS SELECTS DE FILTRO
+    $datos['categorias'] = $this->categoriaModel->orderBy('titulo', 'ASC')->findAll();
+    $datos['etiquetas'] = $this->etiquetaModel->orderBy('nombre', 'ASC')->findAll();
+
+    // PASAMOS LOS FILTROS PARA MANTENERLOS EN EL FORMULARIO
+    $datos['filtros'] = $filtros;
+
+    return view('peliculas/index', $datos);
+}
+```
+
+### `VISTA DE PELÍCULAS CON BARRA DE FILTROS`
+
+***ARCHIVO: `app/Views/peliculas/index.php`***
+
+***EL FORMULARIO DE FILTROS USA `method="GET"` PARA QUE LOS FILTROS APAREZCAN EN LA URL Y SE PUEDAN COMPARTIR:***
+
+| CAMPO | TIPO | QUÉ FILTRA |
+|---|---|---|
+| ***`busqueda`*** | ***INPUT TEXT*** | ***BÚSQUEDA POR TÍTULO Y DESCRIPCIÓN (LIKE %texto%)*** |
+| ***`categoria_id`*** | ***SELECT*** | ***FILTRAR POR CATEGORÍA (WHERE categoria_id = X)*** |
+| ***`etiqueta_id`*** | ***SELECT*** | ***FILTRAR POR ETIQUETA (JOIN CON TABLA PIVOTE)*** |
+| ***BOTÓN FILTRAR*** | ***SUBMIT*** | ***APLICA LOS FILTROS Y MUESTRA LOS RESULTADOS*** |
+| ***BOTÓN LIMPIAR*** | ***ENLACE*** | ***VUELVE A LA URL SIN PARÁMETROS (QUITA TODOS LOS FILTROS)*** |
+
+### `PAGINACIÓN EN LA VISTA`
+
+***SE AÑADEN LOS ENLACES DE PAGINACIÓN DEBAJO DE LA TABLA:***
+
+```php
+<!-- GENERA LOS BOTONES DE PAGINACIÓN (1, 2, 3, SIGUIENTE, ANTERIOR) -->
+<?= $pager->links('default', 'default_full') ?>
+```
+
+***`default_full` USA LA PLANTILLA DE BOOTSTRAP QUE INCLUYE CODEIGNITER, GENERANDO BOTONES ESTILIZADOS***
+
+### `PAGINACIÓN Y BÚSQUEDA EN CATEGORÍAS Y ETIQUETAS`
+
+***LOS CONTROLADORES DE CATEGORÍAS (`app/Controllers/Categoria.php`) Y ETIQUETAS (`app/Controllers/Etiqueta.php`) TAMBIÉN TIENEN PAGINACIÓN Y BÚSQUEDA:***
+
+```php
+// EJEMPLO: CONTROLADOR DE CATEGORÍAS
+public function index()
+{
+    $busqueda = $this->request->getGet('busqueda');
+    $builder = $this->categoriaModel->orderBy('id', 'DESC');
+
+    if (!empty($busqueda)) {
+        $builder->like('titulo', $busqueda, 'both');
+    }
+
+    $datos['categorias'] = $builder->paginate(10);  // 10 POR PÁGINA
+    $datos['pager'] = $this->categoriaModel->pager;
+    $datos['busqueda'] = $busqueda;
+
+    return view('categorias/index', $datos);
+}
+```
+
+### `RESULTADOS POR PÁGINA`
+
+| LISTADO | RESULTADOS POR PÁGINA | FILTROS DISPONIBLES |
+|---|---|---|
+| ***PELÍCULAS*** | ***5*** | ***BÚSQUEDA TEXTO + CATEGORÍA + ETIQUETA*** |
+| ***CATEGORÍAS*** | ***10*** | ***BÚSQUEDA POR TÍTULO*** |
+| ***ETIQUETAS*** | ***10*** | ***BÚSQUEDA POR NOMBRE*** |
+
+### `EJEMPLO DE URL CON FILTROS`
+
+```
+# BUSCAR "matrix" EN PELÍCULAS
+https://udemy.ddev.site/peliculas?busqueda=matrix
+
+# FILTRAR POR CATEGORÍA ID 5 (CIENCIA FICCIÓN)
+https://udemy.ddev.site/peliculas?categoria_id=5
+
+# FILTRAR POR ETIQUETA ID 1 (CLÁSICO)
+https://udemy.ddev.site/peliculas?etiqueta_id=1
+
+# COMBINAR BÚSQUEDA + CATEGORÍA + ETIQUETA
+https://udemy.ddev.site/peliculas?busqueda=matrix&categoria_id=5&etiqueta_id=1
+
+# PÁGINA 2 DE RESULTADOS CON FILTROS
+https://udemy.ddev.site/peliculas?busqueda=matrix&page=2
+
+# BUSCAR "acción" EN CATEGORÍAS
+https://udemy.ddev.site/categorias?busqueda=accion
+
+# BUSCAR "clásico" EN ETIQUETAS
+https://udemy.ddev.site/etiquetas?busqueda=clasico
+```
+
+---
+
 ## `URLS DE ACCESO 🌐`
 
 | URL | DESCRIPCIÓN |
@@ -990,6 +1185,7 @@ if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $
 | ***15*** | ***RELACIÓN N:M: ETIQUETAS ↔ PELÍCULAS CON TABLA PIVOTE, CRUD ETIQUETAS Y CHECKBOXES*** |
 | ***16*** | ***CARGA DE ARCHIVOS: SUBIDA DE IMÁGENES CON VALIDACIÓN, NOMBRES ALEATORIOS Y ELIMINACIÓN*** |
 | ***17*** | ***INTEGRACIÓN: API CON ETIQUETAS, NAVBAR AMPLIADA, FILTRO AUTH EN ETIQUETAS*** |
+| ***18*** | ***LISTADO PAGINADO Y FILTROS: PAGINACIÓN EN TODOS LOS LISTADOS, BÚSQUEDA POR TEXTO, FILTRO POR CATEGORÍA/ETIQUETA, LIKE AGRUPADO CON groupStart()/groupEnd()*** |
 
 ---
 
@@ -1007,6 +1203,8 @@ if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $
 | ***NO HAY ETIQUETAS EN LOS CHECKBOXES*** | ***NO SE EJECUTÓ EL SEEDER DE ETIQUETAS*** | ***`ddev exec php spark db:seed EtiquetaSeeder`*** |
 | ***LA IMAGEN NO SE SUBE*** | ***EL FORMULARIO NO TIENE `enctype="multipart/form-data"`*** | ***VERIFICAR QUE EL FORM TENGA ESE ATRIBUTO*** |
 | ***DDEV NO ARRANCA*** | ***DOCKER NO ESTÁ CORRIENDO O WSL ESTÁ APAGADO*** | ***INICIAR DOCKER DESKTOP Y EJECUTAR `ddev start`*** |
+| ***LA PAGINACIÓN NO MUESTRA ENLACES*** | ***HAY MENOS REGISTROS QUE EL LÍMITE POR PÁGINA*** | ***INSERTAR MÁS DATOS O REDUCIR EL NÚMERO POR PÁGINA*** |
+| ***LOS FILTROS SE PIERDEN AL PAGINAR*** | ***EL FORMULARIO NO USA `method="GET"`*** | ***VERIFICAR QUE EL FORM USE GET Y QUE LOS INPUTS TENGAN EL VALUE CON EL FILTRO ACTUAL*** |
 
 ---
 

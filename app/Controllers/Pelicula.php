@@ -39,13 +39,43 @@ class Pelicula extends BaseController
         helper('text');
     }
 
-    // MÉTODO INDEX: MUESTRA EL LISTADO DE TODAS LAS PELÍCULAS
+    // =============================================
+    // SECCIÓN 18: MÉTODO INDEX CON PAGINACIÓN Y FILTROS
+    // =============================================
+    // MUESTRA EL LISTADO DE PELÍCULAS PAGINADO Y FILTRADO
+    // LOS FILTROS SE RECIBEN POR GET (QUERY STRING): ?busqueda=matrix&categoria_id=5&etiqueta_id=1
     public function index()
     {
         // PREPARAMOS LOS DATOS PARA LA VISTA
         $datos['titulo'] = 'Listado de Películas';
-        // USAMOS EL MÉTODO PERSONALIZADO QUE TRAE PELÍCULAS CON EL NOMBRE DE SU CATEGORÍA (JOIN)
-        $datos['peliculas'] = $this->peliculaModel->getPeliculasConCategoria();
+
+        // RECOGEMOS LOS FILTROS DE LA URL (QUERY STRING) USANDO getGet()
+        // getGet() LEE LOS PARÁMETROS DE LA URL (?busqueda=matrix)
+        $filtros = [
+            // TEXTO DE BÚSQUEDA: SE BUSCARÁ CON LIKE EN TÍTULO Y DESCRIPCIÓN
+            'busqueda'     => $this->request->getGet('busqueda'),
+            // ID DE LA CATEGORÍA SELECCIONADA EN EL FILTRO
+            'categoria_id' => $this->request->getGet('categoria_id'),
+            // ID DE LA ETIQUETA SELECCIONADA EN EL FILTRO
+            'etiqueta_id'  => $this->request->getGet('etiqueta_id'),
+        ];
+
+        // LLAMAMOS AL MÉTODO DEL MODELO QUE APLICA LOS FILTROS Y PAGINA
+        // 5 = NÚMERO DE PELÍCULAS POR PÁGINA
+        $datos['peliculas'] = $this->peliculaModel->getPeliculasFiltradas($filtros, 5);
+
+        // OBTENEMOS EL OBJETO PAGER DEL MODELO PARA GENERAR LOS ENLACES DE PAGINACIÓN
+        // EL PAGER SABE EN QUÉ PÁGINA ESTAMOS, CUÁNTAS PÁGINAS HAY, ETC.
+        $datos['pager'] = $this->peliculaModel->pager;
+
+        // PASAMOS TODAS LAS CATEGORÍAS PARA EL SELECT DE FILTRO
+        $datos['categorias'] = $this->categoriaModel->orderBy('titulo', 'ASC')->findAll();
+
+        // PASAMOS TODAS LAS ETIQUETAS PARA EL SELECT DE FILTRO
+        $datos['etiquetas'] = $this->etiquetaModel->orderBy('nombre', 'ASC')->findAll();
+
+        // PASAMOS LOS FILTROS ACTUALES PARA QUE SE MANTENGAN SELECCIONADOS EN EL FORMULARIO
+        $datos['filtros'] = $filtros;
 
         // CARGAMOS LA VISTA DEL LISTADO Y LE PASAMOS LOS DATOS
         return view('peliculas/index', $datos);
@@ -98,11 +128,9 @@ class Pelicula extends BaseController
             }
 
             // GENERAMOS UN NOMBRE ALEATORIO PARA EVITAR COLISIONES DE NOMBRES
-            // getRandomName() CREA UN NOMBRE ÚNICO BASADO EN TIMESTAMP + RANDOM
             $nuevoNombre = $imagen->getRandomName();
 
             // MOVEMOS LA IMAGEN A LA CARPETA public/uploads/peliculas/
-            // SI LA CARPETA NO EXISTE, CODEIGNITER LA CREA AUTOMÁTICAMENTE
             $imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
 
             // GUARDAMOS EL NOMBRE DEL ARCHIVO EN EL ARRAY DE DATOS
@@ -127,7 +155,6 @@ class Pelicula extends BaseController
 
         // SI SE SELECCIONARON ETIQUETAS, LAS SINCRONIZAMOS EN LA TABLA PIVOTE
         if (!empty($etiquetas)) {
-            // sincronizar() BORRA LAS ANTERIORES Y ASIGNA LAS NUEVAS
             $this->peliculaEtiquetaModel->sincronizar($peliculaId, $etiquetas);
         }
 
@@ -173,63 +200,40 @@ class Pelicula extends BaseController
 
         // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
         $datos = [
-            // OBTENEMOS EL CAMPO 'titulo' DEL POST
             'titulo'       => $this->request->getPost('titulo'),
-            // OBTENEMOS EL CAMPO 'descripcion' DEL POST
             'descripcion'  => $this->request->getPost('descripcion'),
-            // OBTENEMOS EL CAMPO 'categoria_id' DEL POST
             'categoria_id' => $this->request->getPost('categoria_id') ?: null,
         ];
 
-        // =============================================
         // SECCIÓN 16: CARGA DE ARCHIVOS (IMAGEN) AL EDITAR
-        // =============================================
-
-        // OBTENEMOS EL ARCHIVO SUBIDO DESDE EL CAMPO 'imagen' DEL FORMULARIO
         $imagen = $this->request->getFile('imagen');
 
-        // VERIFICAMOS QUE SE HAYA SUBIDO UNA NUEVA IMAGEN
         if ($imagen && $imagen->isValid() && !$imagen->hasMoved()) {
-            // VALIDAMOS QUE EL ARCHIVO SEA UNA IMAGEN VÁLIDA Y NO SUPERE 2MB
             $reglas = [
                 'imagen' => 'uploaded[imagen]|max_size[imagen,2048]|is_image[imagen]|mime_in[imagen,image/jpg,image/jpeg,image/png,image/gif]',
             ];
 
-            // SI LA VALIDACIÓN FALLA, REDIRIGIMOS CON ERRORES
             if (!$this->validate($reglas)) {
                 return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
             }
 
-            // SI LA PELÍCULA YA TENÍA UNA IMAGEN ANTERIOR, LA ELIMINAMOS DEL SERVIDOR
+            // SI YA TENÍA IMAGEN, LA ELIMINAMOS DEL SERVIDOR
             if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $pelicula['imagen'])) {
-                // unlink() ELIMINA EL ARCHIVO FÍSICO DEL DISCO
                 unlink(FCPATH . 'uploads/peliculas/' . $pelicula['imagen']);
             }
 
-            // GENERAMOS UN NOMBRE ALEATORIO PARA LA NUEVA IMAGEN
             $nuevoNombre = $imagen->getRandomName();
-
-            // MOVEMOS LA IMAGEN A LA CARPETA public/uploads/peliculas/
             $imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
-
-            // GUARDAMOS EL NUEVO NOMBRE DEL ARCHIVO EN EL ARRAY DE DATOS
             $datos['imagen'] = $nuevoNombre;
         }
 
-        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN, DEVUELVE FALSE
+        // INTENTAMOS ACTUALIZAR
         if (!$this->peliculaModel->update($id, $datos)) {
-            // REDIRIGIMOS AL FORMULARIO CON LOS ERRORES DE VALIDACIÓN
             return redirect()->back()->withInput()->with('errors', $this->peliculaModel->errors());
         }
 
-        // =============================================
-        // SECCIÓN 15: SINCRONIZAR ETIQUETAS
-        // =============================================
-
-        // OBTENEMOS LAS ETIQUETAS SELECCIONADAS DEL FORMULARIO (ARRAY DE IDs)
+        // SINCRONIZAMOS LAS ETIQUETAS
         $etiquetas = $this->request->getPost('etiquetas') ?? [];
-
-        // SINCRONIZAMOS LAS ETIQUETAS (BORRA LAS ANTERIORES Y ASIGNA LAS NUEVAS)
         $this->peliculaEtiquetaModel->sincronizar($id, $etiquetas);
 
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
@@ -247,9 +251,8 @@ class Pelicula extends BaseController
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('No se encontró la película');
         }
 
-        // SI LA PELÍCULA TIENE UNA IMAGEN, LA ELIMINAMOS DEL SERVIDOR
+        // SI TIENE IMAGEN, LA ELIMINAMOS DEL SERVIDOR
         if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $pelicula['imagen'])) {
-            // unlink() ELIMINA EL ARCHIVO FÍSICO DEL DISCO
             unlink(FCPATH . 'uploads/peliculas/' . $pelicula['imagen']);
         }
 

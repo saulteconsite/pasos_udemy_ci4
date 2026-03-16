@@ -68,4 +68,69 @@ class PeliculaModel extends Model
                      // findAll() EJECUTA LA CONSULTA Y DEVUELVE TODOS LOS RESULTADOS
                      ->findAll();
     }
+
+    // =============================================
+    // SECCIÓN 18: MÉTODO PARA LISTADO PAGINADO CON FILTROS
+    // =============================================
+    // ESTE MÉTODO CONSTRUYE UNA CONSULTA DINÁMICA SEGÚN LOS FILTROS RECIBIDOS
+    // Y DEVUELVE LOS RESULTADOS PAGINADOS (NO TODOS A LA VEZ)
+    // RECIBE UN ARRAY DE FILTROS: busqueda, categoria_id, etiqueta_id
+    // RECIBE EL NÚMERO DE RESULTADOS POR PÁGINA (POR DEFECTO 5)
+    public function getPeliculasFiltradas($filtros = [], $porPagina = 5)
+    {
+        // INICIAMOS LA CONSULTA CON SELECT Y JOIN IGUAL QUE getPeliculasConCategoria()
+        // peliculas.* TRAE TODOS LOS CAMPOS DE LA TABLA PELICULAS
+        // categorias.titulo AS categoria_nombre TRAE EL NOMBRE DE LA CATEGORÍA
+        $builder = $this->select('peliculas.*, categorias.titulo AS categoria_nombre')
+                        // LEFT JOIN PARA INCLUIR PELÍCULAS SIN CATEGORÍA
+                        ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left');
+
+        // =============================================
+        // FILTRO 1: BÚSQUEDA POR TEXTO (LIKE AGRUPADO)
+        // =============================================
+        // SI EL USUARIO ESCRIBIÓ ALGO EN EL CAMPO DE BÚSQUEDA
+        if (!empty($filtros['busqueda'])) {
+            // groupStart() ABRE UN PARÉNTESIS EN LA CONSULTA SQL: WHERE (...)
+            // ESTO AGRUPA LAS CONDICIONES OR PARA QUE NO INTERFIERAN CON OTROS FILTROS
+            // SIN AGRUPAR: WHERE titulo LIKE '%matrix%' OR descripcion LIKE '%matrix%' AND categoria_id = 5
+            // CON AGRUPAR: WHERE (titulo LIKE '%matrix%' OR descripcion LIKE '%matrix%') AND categoria_id = 5
+            $builder->groupStart()
+                        // like() BUSCA COINCIDENCIAS PARCIALES EN EL TÍTULO
+                        // 'both' SIGNIFICA QUE BUSCA %texto% (COINCIDE EN CUALQUIER POSICIÓN)
+                        ->like('peliculas.titulo', $filtros['busqueda'], 'both')
+                        // orLike() TAMBIÉN BUSCA EN LA DESCRIPCIÓN (OR = CUALQUIERA DE LOS DOS)
+                        ->orLike('peliculas.descripcion', $filtros['busqueda'], 'both')
+                    // groupEnd() CIERRA EL PARÉNTESIS
+                    ->groupEnd();
+        }
+
+        // =============================================
+        // FILTRO 2: FILTRAR POR CATEGORÍA
+        // =============================================
+        // SI EL USUARIO SELECCIONÓ UNA CATEGORÍA EN EL SELECT
+        if (!empty($filtros['categoria_id'])) {
+            // where() AÑADE UNA CONDICIÓN EXACTA: categoria_id = X
+            $builder->where('peliculas.categoria_id', $filtros['categoria_id']);
+        }
+
+        // =============================================
+        // FILTRO 3: FILTRAR POR ETIQUETA
+        // =============================================
+        // SI EL USUARIO SELECCIONÓ UNA ETIQUETA EN EL SELECT
+        if (!empty($filtros['etiqueta_id'])) {
+            // JOIN CON LA TABLA PIVOTE PARA FILTRAR POR ETIQUETA
+            // INNER JOIN PORQUE SOLO QUEREMOS PELÍCULAS QUE TENGAN ESA ETIQUETA
+            $builder->join('pelicula_etiqueta', 'pelicula_etiqueta.pelicula_id = peliculas.id', 'inner')
+                    // CONDICIÓN: QUE LA ETIQUETA SEA LA SELECCIONADA
+                    ->where('pelicula_etiqueta.etiqueta_id', $filtros['etiqueta_id']);
+        }
+
+        // ORDENAMOS POR ID DESCENDENTE (MÁS RECIENTES PRIMERO)
+        $builder->orderBy('peliculas.id', 'DESC');
+
+        // paginate() EJECUTA LA CONSULTA PERO SOLO DEVUELVE $porPagina RESULTADOS
+        // CODEIGNITER CALCULA AUTOMÁTICAMENTE EL OFFSET SEGÚN LA PÁGINA ACTUAL (GET ?page=2)
+        // ADEMÁS GENERA INTERNAMENTE EL OBJETO PAGER QUE USAMOS EN LA VISTA PARA LOS ENLACES
+        return $builder->paginate($porPagina);
+    }
 }

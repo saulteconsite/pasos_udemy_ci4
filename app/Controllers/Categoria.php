@@ -19,13 +19,37 @@ class Categoria extends BaseController
         $this->categoriaModel = new CategoriaModel();
     }
 
-    // MÉTODO INDEX: MUESTRA EL LISTADO DE TODAS LAS CATEGORÍAS
+    // =============================================
+    // SECCIÓN 18: MÉTODO INDEX CON PAGINACIÓN Y BÚSQUEDA
+    // =============================================
+    // MUESTRA EL LISTADO DE CATEGORÍAS PAGINADO Y CON BÚSQUEDA POR TEXTO
     public function index()
     {
         // PREPARAMOS LOS DATOS PARA LA VISTA
         $datos['titulo'] = 'Listado de Categorías';
-        // OBTENEMOS TODAS LAS CATEGORÍAS ORDENADAS POR ID DESCENDENTE
-        $datos['categorias'] = $this->categoriaModel->orderBy('id', 'DESC')->findAll();
+
+        // RECOGEMOS EL FILTRO DE BÚSQUEDA DE LA URL (?busqueda=accion)
+        $busqueda = $this->request->getGet('busqueda');
+
+        // CONSTRUIMOS LA CONSULTA BASE ORDENADA POR ID DESCENDENTE
+        $builder = $this->categoriaModel->orderBy('id', 'DESC');
+
+        // SI EL USUARIO ESCRIBIÓ ALGO EN EL CAMPO DE BÚSQUEDA
+        if (!empty($busqueda)) {
+            // like() BUSCA COINCIDENCIAS PARCIALES EN EL TÍTULO
+            // 'both' BUSCA %texto% (COINCIDENCIAS EN CUALQUIER POSICIÓN)
+            $builder->like('titulo', $busqueda, 'both');
+        }
+
+        // paginate(10) DEVUELVE SOLO 10 RESULTADOS POR PÁGINA
+        // CODEIGNITER CALCULA AUTOMÁTICAMENTE EL OFFSET SEGÚN ?page=X
+        $datos['categorias'] = $builder->paginate(10);
+
+        // OBTENEMOS EL OBJETO PAGER PARA GENERAR ENLACES DE PAGINACIÓN EN LA VISTA
+        $datos['pager'] = $this->categoriaModel->pager;
+
+        // PASAMOS EL FILTRO DE BÚSQUEDA PARA QUE SE MANTENGA EN EL INPUT
+        $datos['busqueda'] = $busqueda;
 
         // CARGAMOS LA VISTA DEL LISTADO Y LE PASAMOS LOS DATOS
         return view('categorias/index', $datos);
@@ -92,13 +116,11 @@ class Categoria extends BaseController
 
         // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
         $datos = [
-            // OBTENEMOS EL CAMPO 'titulo' DEL POST
             'titulo' => $this->request->getPost('titulo'),
         ];
 
-        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        // INTENTAMOS ACTUALIZAR
         if (!$this->categoriaModel->update($id, $datos)) {
-            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN DEL MODELO
             return redirect()->back()->withInput()->with('errors', $this->categoriaModel->errors());
         }
 

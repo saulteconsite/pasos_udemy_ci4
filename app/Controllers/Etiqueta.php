@@ -20,13 +20,36 @@ class Etiqueta extends BaseController
         $this->etiquetaModel = new EtiquetaModel();
     }
 
-    // MÉTODO INDEX: MUESTRA EL LISTADO DE TODAS LAS ETIQUETAS
+    // =============================================
+    // SECCIÓN 18: MÉTODO INDEX CON PAGINACIÓN Y BÚSQUEDA
+    // =============================================
+    // MUESTRA EL LISTADO DE ETIQUETAS PAGINADO Y CON BÚSQUEDA POR TEXTO
     public function index()
     {
         // PREPARAMOS LOS DATOS PARA LA VISTA
         $datos['titulo'] = 'Listado de Etiquetas';
-        // OBTENEMOS TODAS LAS ETIQUETAS ORDENADAS POR ID DESCENDENTE
-        $datos['etiquetas'] = $this->etiquetaModel->orderBy('id', 'DESC')->findAll();
+
+        // RECOGEMOS EL FILTRO DE BÚSQUEDA DE LA URL (?busqueda=clasico)
+        $busqueda = $this->request->getGet('busqueda');
+
+        // CONSTRUIMOS LA CONSULTA BASE ORDENADA POR ID DESCENDENTE
+        $builder = $this->etiquetaModel->orderBy('id', 'DESC');
+
+        // SI EL USUARIO ESCRIBIÓ ALGO EN EL CAMPO DE BÚSQUEDA
+        if (!empty($busqueda)) {
+            // like() BUSCA COINCIDENCIAS PARCIALES EN EL NOMBRE
+            // 'both' BUSCA %texto% (COINCIDENCIAS EN CUALQUIER POSICIÓN)
+            $builder->like('nombre', $busqueda, 'both');
+        }
+
+        // paginate(10) DEVUELVE SOLO 10 RESULTADOS POR PÁGINA
+        $datos['etiquetas'] = $builder->paginate(10);
+
+        // OBTENEMOS EL OBJETO PAGER PARA GENERAR ENLACES DE PAGINACIÓN EN LA VISTA
+        $datos['pager'] = $this->etiquetaModel->pager;
+
+        // PASAMOS EL FILTRO DE BÚSQUEDA PARA QUE SE MANTENGA EN EL INPUT
+        $datos['busqueda'] = $busqueda;
 
         // CARGAMOS LA VISTA DEL LISTADO Y LE PASAMOS LOS DATOS
         return view('etiquetas/index', $datos);
@@ -47,13 +70,11 @@ class Etiqueta extends BaseController
     {
         // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
         $datos = [
-            // OBTENEMOS EL CAMPO 'nombre' DEL POST
             'nombre' => $this->request->getPost('nombre'),
         ];
 
-        // INTENTAMOS GUARDAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN INTERNA, DEVUELVE FALSE
+        // INTENTAMOS GUARDAR USANDO EL MODELO
         if (!$this->etiquetaModel->save($datos)) {
-            // REDIRIGIMOS AL FORMULARIO CON LOS DATOS INTRODUCIDOS Y LOS ERRORES DE VALIDACIÓN
             return redirect()->back()->withInput()->with('errors', $this->etiquetaModel->errors());
         }
 
@@ -91,15 +112,13 @@ class Etiqueta extends BaseController
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('No se encontró la etiqueta');
         }
 
-        // RECOGEMOS LOS DATOS DEL FORMULARIO EN UN ARRAY
+        // RECOGEMOS LOS DATOS DEL FORMULARIO
         $datos = [
-            // OBTENEMOS EL CAMPO 'nombre' DEL POST
             'nombre' => $this->request->getPost('nombre'),
         ];
 
-        // INTENTAMOS ACTUALIZAR USANDO EL MODELO; SI FALLA LA VALIDACIÓN, DEVUELVE FALSE
+        // INTENTAMOS ACTUALIZAR
         if (!$this->etiquetaModel->update($id, $datos)) {
-            // REDIRIGIMOS AL FORMULARIO CON LOS ERRORES
             return redirect()->back()->withInput()->with('errors', $this->etiquetaModel->errors());
         }
 
@@ -119,7 +138,6 @@ class Etiqueta extends BaseController
         }
 
         // ELIMINAMOS LOS REGISTROS DE LA TABLA PIVOTE QUE REFERENCIEN A ESTA ETIQUETA
-        // SI NO LO HACEMOS, QUEDARÍAN REGISTROS HUÉRFANOS EN pelicula_etiqueta
         $pivote = new \App\Models\PeliculaEtiquetaModel();
         $pivote->where('etiqueta_id', $id)->delete();
 
