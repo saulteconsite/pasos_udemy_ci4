@@ -125,15 +125,25 @@ database.default.port = 3306
 
 ### `PASO 5: EJECUTAR LAS MIGRACIONES Y SEEDERS`
 
+> [!CAUTION]
+> ***ESTE PASO ES OBLIGATORIO. SI NO SE EJECUTAN LAS MIGRACIONES, LAS TABLAS NO EXISTIRÁN EN LA BASE DE DATOS Y LA APLICACIÓN DARÁ ERROR. SI NO SE EJECUTAN LOS SEEDERS, NO HABRÁ DATOS DE PRUEBA NI USUARIOS PARA HACER LOGIN***
+
 ```bash
 # CREAR LAS TABLAS EN LA BASE DE DATOS (PELICULAS, CATEGORIAS Y USUARIOS)
+# ESTE COMANDO LEE TODOS LOS ARCHIVOS DE app/Database/Migrations/ Y CREA LAS TABLAS
 > ddev exec php spark migrate
 
-# INSERTAR LOS DATOS DE PRUEBA
+# VERIFICAR QUE LAS 3 MIGRACIONES SE HAN EJECUTADO CORRECTAMENTE
+> ddev exec php spark migrate:status
+
+# INSERTAR LOS DATOS DE PRUEBA EN LAS TABLAS
 > ddev exec php spark db:seed PeliculaSeeder
 > ddev exec php spark db:seed CategoriaSeeder
 > ddev exec php spark db:seed UsuarioSeeder
 ```
+
+> [!IMPORTANT]
+> ***SI AL INTENTAR HACER LOGIN APARECE UN ERROR DE "TABLE NOT FOUND" O SIMILAR, ES PORQUE NO SE HA EJECUTADO `php spark migrate`. EJECUTA ESE COMANDO Y LUEGO EL SEEDER DE USUARIOS***
 
 ### `PASO 6: ABRIR EN EL NAVEGADOR`
 
@@ -713,6 +723,20 @@ session()->set([
 | ***10*** | ***FILTROS DE SEGURIDAD: AUTHFILTER, ADMINFILTER, REGISTRO EN Config/Filters.php*** |
 | ***11*** | ***AUTENTICACIÓN: LOGIN, REGISTRO, LOGOUT, HASH BCRYPT, SESIONES, ROLES (ADMIN/USUARIO)*** |
 | ***12*** | ***API REST CRUD: ENDPOINTS JSON PARA CATEGORÍAS Y PELÍCULAS CON RESOURCECONTROLLER*** |
+
+---
+
+## `SOLUCIÓN DE PROBLEMAS COMUNES 🔧`
+
+| ERROR | CAUSA | SOLUCIÓN |
+|---|---|---|
+| ***`Table 'db.usuarios' doesn't exist`*** | ***NO SE EJECUTÓ LA MIGRACIÓN DE USUARIOS*** | ***`ddev exec php spark migrate`*** |
+| ***`Table 'db.peliculas' doesn't exist`*** | ***NO SE EJECUTÓ NINGUNA MIGRACIÓN*** | ***`ddev exec php spark migrate`*** |
+| ***NO HAY USUARIOS PARA HACER LOGIN*** | ***NO SE EJECUTÓ EL SEEDER DE USUARIOS*** | ***`ddev exec php spark db:seed UsuarioSeeder`*** |
+| ***CREDENCIALES INCORRECTAS CON 123456*** | ***LOS USUARIOS NO EXISTEN EN LA BD*** | ***EJECUTAR EL SEEDER: `ddev exec php spark db:seed UsuarioSeeder`*** |
+| ***REDIRIGE AL LOGIN AL ENTRAR A /peliculas*** | ***ES EL COMPORTAMIENTO CORRECTO (FILTRO AUTH)*** | ***INICIA SESIÓN PRIMERO EN /auth/login*** |
+| ***ERROR 500 AL ACCEDER A LA WEB*** | ***FALTA EL ARCHIVO `.env` O ESTÁ MAL CONFIGURADO*** | ***COPIAR `env` A `.env` Y CONFIGURAR (VER PASO 4)*** |
+| ***DDEV NO ARRANCA*** | ***DOCKER NO ESTÁ CORRIENDO O WSL ESTÁ APAGADO*** | ***INICIAR DOCKER DESKTOP Y EJECUTAR `ddev start`*** |
 
 ---
 
