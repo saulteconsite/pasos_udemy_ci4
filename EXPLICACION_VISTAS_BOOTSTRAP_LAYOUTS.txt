@@ -1,0 +1,1010 @@
+================================================================================
+  CLASE COMPLETA: VISTAS, LAYOUTS Y BOOTSTRAP EN CODEIGNITER 4
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: ¿QUÉ ES UNA VISTA?
+████████████████████████████████████████████████████████████████████████████████
+
+  Una vista es un archivo PHP que contiene el HTML que ve el usuario en el
+  navegador. En el patrón MVC (Modelo-Vista-Controlador), la vista es la "V":
+
+    - MODELO    → Trabaja con la base de datos (consultas, inserciones, etc.)
+    - VISTA     → Muestra la información al usuario (HTML, formularios, tablas)
+    - CONTROLADOR → Conecta el modelo con la vista (recibe peticiones, pide
+                    datos al modelo, y los envía a la vista)
+
+  La idea fundamental es: LA VISTA SOLO MUESTRA DATOS, NO LOS PROCESA.
+  El controlador es quien decide qué datos enviar y qué vista cargar.
+
+
+================================================================================
+  1.1 ¿DÓNDE SE GUARDAN LAS VISTAS?
+================================================================================
+
+  En CodeIgniter 4, TODAS las vistas van dentro de:
+
+    app/Views/
+
+  En tu proyecto, la estructura es:
+
+    app/Views/
+    ├── layout/
+    │   └── main.php              ← LAYOUT PRINCIPAL (plantilla base)
+    ├── auth/
+    │   ├── login.php             ← Formulario de login
+    │   └── registro.php          ← Formulario de registro
+    ├── peliculas/
+    │   ├── index.php             ← Listado de películas
+    │   ├── create.php            ← Formulario para crear película
+    │   └── edit.php              ← Formulario para editar película
+    ├── categorias/
+    │   ├── index.php             ← Listado de categorías
+    │   ├── create.php            ← Formulario para crear categoría
+    │   └── edit.php              ← Formulario para editar categoría
+    └── etiquetas/
+        ├── index.php             ← Listado de etiquetas
+        ├── create.php            ← Formulario para crear etiqueta
+        └── edit.php              ← Formulario para editar etiqueta
+
+  CONVENCIÓN DE NOMBRES:
+  Las carpetas dentro de Views suelen tener el mismo nombre que el controlador
+  (en minúsculas). Si el controlador se llama "Pelicula", la carpeta es
+  "peliculas". Cada método del controlador suele tener su propia vista:
+    - index()  → index.php
+    - create() → create.php
+    - edit()   → edit.php
+
+
+================================================================================
+  1.2 ¿CÓMO SE CARGA UNA VISTA DESDE EL CONTROLADOR?
+================================================================================
+
+  Con la función view(). Ejemplo real de tu proyecto:
+
+  En el controlador Pelicula.php, método create():
+
+      public function create()
+      {
+          $datos['titulo'] = 'Crear Película';
+          $datos['categorias'] = $this->categoriaModel->findAll();
+          $datos['etiquetas'] = $this->etiquetaModel->findAll();
+
+          return view('peliculas/create', $datos);
+      }
+
+  Desglose:
+
+    view('peliculas/create', $datos)
+          │                    │
+          │                    └── SEGUNDO PARÁMETRO: array asociativo con
+          │                        los datos que la vista necesita. Cada clave
+          │                        del array se convierte en una variable PHP
+          │                        disponible dentro de la vista.
+          │
+          └── PRIMER PARÁMETRO: ruta de la vista relativa a app/Views/
+              'peliculas/create' → carga app/Views/peliculas/create.php
+              (no hace falta poner .php, CI4 lo añade automáticamente)
+
+  ¿QUÉ PASA CON $datos?
+
+  Cuando haces:
+      $datos['titulo'] = 'Crear Película';
+      $datos['categorias'] = [...];
+      return view('peliculas/create', $datos);
+
+  Dentro de la vista create.php puedes usar directamente:
+      $titulo      → vale 'Crear Película'
+      $categorias  → contiene el array de categorías
+
+  Es decir, las CLAVES del array $datos se convierten en VARIABLES en la vista.
+  Internamente CI4 hace un extract($datos) que convierte cada clave en variable.
+
+
+================================================================================
+  1.3 ¿QUÉ CONTIENE UNA VISTA?
+================================================================================
+
+  Una mezcla de HTML y PHP. El PHP se usa para mostrar datos dinámicos.
+  Ejemplo simplificado del listado de películas:
+
+      <table>
+          <?php foreach ($peliculas as $pelicula): ?>
+              <tr>
+                  <td><?= esc($pelicula['titulo']) ?></td>
+                  <td><?= esc($pelicula['descripcion']) ?></td>
+              </tr>
+          <?php endforeach; ?>
+      </table>
+
+  SINTAXIS IMPORTANTE:
+    <?= ... ?>    → Atajo de <?php echo ... ?>. Imprime un valor.
+    <?php ... ?>  → Bloque PHP normal para lógica (if, foreach, etc.)
+
+  FUNCIÓN esc():
+    esc($pelicula['titulo']) ESCAPA el texto para evitar ataques XSS.
+    Si alguien guardó como título: <script>alert('hackeado')</script>
+    Sin esc() → El navegador ejecutaría el JavaScript malicioso
+    Con esc() → Se muestra como texto plano: &lt;script&gt;alert...
+
+    REGLA: SIEMPRE usar esc() al mostrar datos que vienen de la base de datos
+    o del usuario.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: ¿QUÉ ES UN LAYOUT? (PLANTILLA BASE)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 EL PROBLEMA QUE RESUELVE
+================================================================================
+
+  Sin layouts, tendrías que repetir el mismo HTML en CADA vista:
+
+      <!-- peliculas/index.php -->
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Películas</title>
+          <link href="bootstrap.css" rel="stylesheet">
+      </head>
+      <body>
+          <nav>... barra de navegación ...</nav>
+          <div class="container">
+              <!-- contenido de películas -->
+          </div>
+          <script src="bootstrap.js"></script>
+      </body>
+      </html>
+
+      <!-- categorias/index.php -->
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Categorías</title>
+          <link href="bootstrap.css" rel="stylesheet">    ← REPETIDO
+      </head>
+      <body>
+          <nav>... barra de navegación ...</nav>           ← REPETIDO
+          <div class="container">
+              <!-- contenido de categorías -->
+          </div>
+          <script src="bootstrap.js"></script>             ← REPETIDO
+      </body>
+      </html>
+
+  Si tienes 10 vistas, repites el 80% del HTML 10 veces. Y si quieres
+  cambiar algo del menú, tienes que modificar 10 archivos.
+
+  SOLUCIÓN: Un LAYOUT (plantilla base) que contenga todo lo común, y las
+  vistas hijas solo definen el contenido que cambia.
+
+
+================================================================================
+  2.2 CÓMO FUNCIONA EL LAYOUT EN TU PROYECTO
+================================================================================
+
+  Tu layout está en: app/Views/layout/main.php
+
+  Estructura simplificada:
+
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title><?= $titulo ?? 'CodeIgniter 4 - CRUD' ?></title>
+          <link href="bootstrap.css" rel="stylesheet">
+          <link href="font-awesome.css" rel="stylesheet">
+      </head>
+      <body>
+          <nav>
+              ... barra de navegación (siempre visible) ...
+          </nav>
+
+          <div class="container mt-4">
+              ... mensajes flash (éxito/error) ...
+
+              <?= $this->renderSection('contenido') ?>    ← ¡AQUÍ VA EL
+          </div>                                              CONTENIDO DE
+                                                              CADA VISTA HIJA!
+          <script src="bootstrap.js"></script>
+      </body>
+      </html>
+
+  La línea clave es:
+
+      <?= $this->renderSection('contenido') ?>
+
+  Esto le dice a CI4: "Aquí se va a insertar una sección llamada 'contenido'
+  que será definida por cada vista hija".
+
+  Es como un HUECO en la plantilla que cada página rellena con su contenido.
+
+
+================================================================================
+  2.3 CÓMO UNA VISTA HIJA USA EL LAYOUT
+================================================================================
+
+  Ejemplo real: app/Views/peliculas/index.php
+
+      <?= $this->extend('layout/main') ?>       ← LÍNEA 1: "Uso el layout"
+
+      <?= $this->section('contenido') ?>         ← LÍNEA 2: "Empieza mi contenido"
+
+          <h1>Películas</h1>
+          <table>
+              ... tabla con películas ...
+          </table>
+
+      <?= $this->endSection() ?>                 ← LÍNEA 3: "Fin de mi contenido"
+
+  Desglose de las 3 líneas mágicas:
+
+  1) $this->extend('layout/main')
+     → "Esta vista EXTIENDE (hereda de) el layout main.php"
+     → DEBE SER LA PRIMERA LÍNEA del archivo.
+     → Le dice a CI4: "No renderices esta vista sola, insértala dentro
+       del layout."
+
+  2) $this->section('contenido')
+     → "Lo que viene a continuación es la sección llamada 'contenido'"
+     → El nombre 'contenido' debe coincidir con el que pusimos en el
+       layout: $this->renderSection('contenido')
+
+  3) $this->endSection()
+     → "Aquí termina la sección"
+
+  RESULTADO FINAL: Cuando CI4 renderiza peliculas/index.php:
+
+  1. Ve que extiende layout/main.
+  2. Procesa el layout main.php.
+  3. Cuando llega a renderSection('contenido'), busca la sección 'contenido'
+     definida en la vista hija.
+  4. Inserta el HTML de la sección en ese punto.
+  5. El navegador recibe una página HTML completa.
+
+
+================================================================================
+  2.4 DIAGRAMA DE CÓMO SE ENSAMBLA LA PÁGINA FINAL
+================================================================================
+
+  LAYOUT (main.php)                    VISTA HIJA (peliculas/index.php)
+  ┌──────────────────────┐             ┌──────────────────────┐
+  │ <!DOCTYPE html>      │             │ extend('layout/main')│
+  │ <html>               │             │                      │
+  │   <head>             │             │ section('contenido') │
+  │     CSS de Bootstrap │             │   <h1>Películas</h1> │
+  │   </head>            │             │   <table>...</table> │
+  │   <body>             │             │ endSection()         │
+  │     <nav>menú</nav>  │             └──────────────────────┘
+  │     <div>            │
+  │       ┌────────────┐ │                       │
+  │       │renderSection│◄────── SE INSERTA ─────┘
+  │       │('contenido')│ │
+  │       └────────────┘ │
+  │     </div>           │
+  │     JS de Bootstrap  │
+  │   </body>            │
+  │ </html>              │
+  └──────────────────────┘
+
+  PÁGINA FINAL QUE RECIBE EL NAVEGADOR:
+  ┌──────────────────────┐
+  │ <!DOCTYPE html>      │  ← Del layout
+  │ <html>               │  ← Del layout
+  │   <head>             │  ← Del layout
+  │     CSS de Bootstrap │  ← Del layout
+  │   </head>            │  ← Del layout
+  │   <body>             │  ← Del layout
+  │     <nav>menú</nav>  │  ← Del layout
+  │     <div>            │  ← Del layout
+  │       <h1>Películas  │  ← DE LA VISTA HIJA
+  │       <table>...     │  ← DE LA VISTA HIJA
+  │     </div>           │  ← Del layout
+  │     JS de Bootstrap  │  ← Del layout
+  │   </body>            │  ← Del layout
+  │ </html>              │  ← Del layout
+  └──────────────────────┘
+
+
+================================================================================
+  2.5 TODAS LAS VISTAS DEL PROYECTO USAN EL MISMO LAYOUT
+================================================================================
+
+  Esto significa que TODAS comparten:
+    - La misma barra de navegación
+    - Los mismos CSS (Bootstrap, Font Awesome)
+    - Los mismos JS (Bootstrap bundle)
+    - Los mismos mensajes flash de éxito/error
+    - El mismo contenedor (<div class="container mt-4">)
+
+  La única diferencia entre páginas es lo que va dentro de la section('contenido').
+
+  EJEMPLO COMPARATIVO:
+
+  peliculas/index.php → section('contenido') tiene la TABLA de películas
+  peliculas/create.php → section('contenido') tiene el FORMULARIO de crear
+  auth/login.php → section('contenido') tiene el FORMULARIO de login
+  categorias/index.php → section('contenido') tiene la TABLA de categorías
+
+  Pero TODAS tienen la misma navbar, los mismos estilos, etc.
+
+
+================================================================================
+  2.6 SECCIONES MÚLTIPLES (CONCEPTO AVANZADO)
+================================================================================
+
+  Puedes tener más de una sección. Por ejemplo, si quisieras que cada
+  página pudiera añadir sus propios CSS o JS:
+
+  En el layout:
+      <head>
+          <link href="bootstrap.css" rel="stylesheet">
+          <?= $this->renderSection('css_extra') ?>     ← Sección para CSS extra
+      </head>
+      <body>
+          <?= $this->renderSection('contenido') ?>     ← Sección principal
+          <script src="bootstrap.js"></script>
+          <?= $this->renderSection('js_extra') ?>      ← Sección para JS extra
+      </body>
+
+  En una vista hija:
+      <?= $this->extend('layout/main') ?>
+
+      <?= $this->section('css_extra') ?>
+          <link href="mi-css-especial.css" rel="stylesheet">
+      <?= $this->endSection() ?>
+
+      <?= $this->section('contenido') ?>
+          <h1>Mi página</h1>
+      <?= $this->endSection() ?>
+
+      <?= $this->section('js_extra') ?>
+          <script src="mi-script.js"></script>
+      <?= $this->endSection() ?>
+
+  En tu proyecto actual solo usas UNA sección ('contenido'), pero es bueno
+  saber que se pueden usar varias.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: ¿QUÉ ES BOOTSTRAP?
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  3.1 DEFINICIÓN
+================================================================================
+
+  Bootstrap es un FRAMEWORK CSS creado por Twitter. Es una colección de
+  estilos CSS y componentes JavaScript ya hechos que te permiten crear
+  interfaces web bonitas y responsivas SIN tener que escribir CSS desde cero.
+
+  "Responsivo" significa que la página se adapta automáticamente al tamaño
+  de la pantalla (ordenador, tablet, móvil).
+
+  En tu proyecto se usa Bootstrap 5.3.3, cargado desde CDN:
+
+  En layout/main.php:
+
+    CSS:
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+
+    JavaScript:
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+    </script>
+
+  ¿QUÉ ES UN CDN?
+  CDN = Content Delivery Network. Es un servidor externo que aloja archivos
+  públicos. En vez de descargar Bootstrap y meterlo en tu proyecto, lo cargas
+  directamente desde internet. Ventaja: más rápido (servidores optimizados).
+  Desventaja: si no hay internet, no funciona.
+
+
+================================================================================
+  3.2 BOOTSTRAP NO TIENE NADA QUE VER CON CODEIGNITER
+================================================================================
+
+  Esto es FUNDAMENTAL entenderlo:
+
+  - CodeIgniter 4 → Framework PHP para el BACKEND (servidor)
+  - Bootstrap → Framework CSS para el FRONTEND (navegador)
+
+  Son completamente independientes. Podrías usar CI4 sin Bootstrap
+  (y escribir tu propio CSS), o podrías usar Bootstrap sin CI4 (con
+  Laravel, Symfony, o incluso sin framework PHP).
+
+  Se usan juntos por conveniencia: CI4 genera el HTML y Bootstrap lo
+  hace bonito.
+
+
+================================================================================
+  3.3 ¿CÓMO FUNCIONA BOOTSTRAP? SISTEMA DE CLASES CSS
+================================================================================
+
+  Bootstrap funciona con CLASES CSS. Tú añades clases a tus elementos
+  HTML y Bootstrap les aplica estilos automáticamente.
+
+  No necesitas escribir CSS. Solo necesitas saber qué clase usar.
+
+  Ejemplo básico:
+
+      <!-- SIN Bootstrap (HTML pelado) -->
+      <button>Guardar</button>
+
+      <!-- CON Bootstrap -->
+      <button class="btn btn-primary">Guardar</button>
+
+  La clase "btn" le da aspecto de botón y "btn-primary" lo pinta de azul.
+
+
+================================================================================
+  3.4 COMPONENTES DE BOOTSTRAP USADOS EN TU PROYECTO
+================================================================================
+
+  Voy a explicar CADA componente de Bootstrap que aparece en tus vistas,
+  con el ejemplo real de dónde se usa:
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.1  SISTEMA DE GRID (REJILLA) - row, col
+  ─────────────────────────────────────────────────────────────────────────
+
+  Bootstrap divide la pantalla en 12 COLUMNAS invisibles. Tú decides
+  cuántas columnas ocupa cada elemento.
+
+  Ejemplo de tu proyecto (auth/login.php):
+
+      <div class="row justify-content-center">
+          <div class="col-md-6">
+              ... formulario de login ...
+          </div>
+      </div>
+
+  Desglose:
+    - "row"     → Crea una fila que contiene columnas
+    - "col-md-6" → En pantallas medianas (md) o mayores, ocupa 6 de 12
+                    columnas = 50% del ancho. En móviles ocupa el 100%.
+    - "justify-content-center" → Centra el contenido horizontalmente
+
+  Resultado: El formulario de login ocupa la mitad de la pantalla y está
+  centrado. En móviles ocupa todo el ancho.
+
+  Otro ejemplo (peliculas/create.php, checkboxes de etiquetas):
+
+      <div class="col-md-3 col-6">
+          ... checkbox de etiqueta ...
+      </div>
+
+    - "col-md-3" → En pantallas medianas: 3/12 = 25% del ancho (4 por fila)
+    - "col-6"    → En móviles: 6/12 = 50% del ancho (2 por fila)
+
+  TABLA DE TAMAÑOS DE PANTALLA:
+    col-    → Todos los tamaños (extra pequeño, <576px)
+    col-sm- → Small (≥576px)
+    col-md- → Medium (≥768px) - tablets
+    col-lg- → Large (≥992px) - escritorios
+    col-xl- → Extra large (≥1200px) - pantallas grandes
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.2  CONTAINER
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu layout/main.php:
+
+      <div class="container mt-4">
+          <?= $this->renderSection('contenido') ?>
+      </div>
+
+    - "container" → Centra el contenido con márgenes laterales automáticos.
+                    Sin container, todo el contenido iría pegado a los
+                    bordes de la pantalla.
+    - "mt-4"      → Margin-Top nivel 4. Añade un margen superior.
+
+  SISTEMA DE ESPACIADO:
+    m = margin (espacio exterior)
+    p = padding (espacio interior)
+
+    t = top (arriba)        b = bottom (abajo)
+    s = start (izquierda)   e = end (derecha)
+    x = horizontal           y = vertical
+
+    0 = nada    1 = 0.25rem    2 = 0.5rem
+    3 = 1rem    4 = 1.5rem     5 = 3rem
+
+  Ejemplos:
+    mt-4 → margin-top: 1.5rem
+    mb-3 → margin-bottom: 1rem
+    p-3  → padding: 1rem (todos los lados)
+    me-2 → margin-end (derecha): 0.5rem
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.3  NAVBAR (BARRA DE NAVEGACIÓN)
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu layout/main.php:
+
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+          <div class="container">
+              <a class="navbar-brand" href="...">CI4 Udemy</a>
+              <button class="navbar-toggler" ...>
+                  <span class="navbar-toggler-icon"></span>
+              </button>
+              <div class="collapse navbar-collapse" id="navbarNav">
+                  <ul class="navbar-nav me-auto">
+                      <li class="nav-item">
+                          <a class="nav-link" href="...">Películas</a>
+                      </li>
+                  </ul>
+              </div>
+          </div>
+      </nav>
+
+  Desglose:
+    - "navbar"             → Componente de barra de navegación
+    - "navbar-expand-lg"   → En pantallas grandes se expande; en pequeñas
+                             se colapsa en menú hamburguesa
+    - "navbar-dark"        → Texto claro (para fondos oscuros)
+    - "bg-dark"            → Fondo oscuro (casi negro)
+    - "navbar-brand"       → El logo/nombre de la app
+    - "navbar-toggler"     → Botón hamburguesa para móviles (☰)
+    - "collapse navbar-collapse" → Contenido que se colapsa en móviles
+    - "navbar-nav"         → Lista de enlaces del menú
+    - "nav-item"           → Un elemento del menú
+    - "nav-link"           → Un enlace del menú
+    - "me-auto"            → Margin-End automático → empuja lo que viene
+                             después hacia la derecha
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.4  CARDS (TARJETAS)
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu auth/login.php:
+
+      <div class="card shadow mt-4">
+          <div class="card-header bg-dark text-white text-center">
+              <h3>Iniciar Sesión</h3>
+          </div>
+          <div class="card-body">
+              ... formulario ...
+          </div>
+          <div class="card-footer text-center">
+              ¿No tienes cuenta? ...
+          </div>
+      </div>
+
+  Desglose:
+    - "card"        → Componente tarjeta (caja con bordes redondeados)
+    - "shadow"      → Añade una sombra debajo de la tarjeta
+    - "card-header" → Cabecera de la tarjeta (parte superior coloreada)
+    - "card-body"   → Cuerpo de la tarjeta (contenido principal)
+    - "card-footer" → Pie de la tarjeta (parte inferior)
+    - "bg-dark"     → Fondo oscuro
+    - "text-white"  → Texto blanco
+    - "text-center" → Texto centrado
+
+  También se usa como contenedor de filtros:
+      <form class="card card-body bg-light mb-4">
+
+    - "card card-body" → Tarjeta que directamente es su propio cuerpo
+    - "bg-light"       → Fondo gris claro
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.5  TABLAS
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu peliculas/index.php:
+
+      <div class="table-responsive">
+          <table class="table table-bordered table-striped table-hover">
+              <thead class="table-dark">
+                  <tr>
+                      <th>ID</th>
+                      <th>Título</th>
+                      ...
+                  </tr>
+              </thead>
+              <tbody>
+                  <?php foreach ($peliculas as $pelicula): ?>
+                      <tr>
+                          <td><?= $pelicula['id'] ?></td>
+                          ...
+                      </tr>
+                  <?php endforeach; ?>
+              </tbody>
+          </table>
+      </div>
+
+  Desglose:
+    - "table-responsive" → En pantallas pequeñas, la tabla tiene scroll
+                           horizontal en vez de romperse
+    - "table"            → Estilo base de tabla Bootstrap
+    - "table-bordered"   → Bordes en todas las celdas
+    - "table-striped"    → Filas alternas con fondo gris claro (cebra)
+    - "table-hover"      → Al pasar el ratón sobre una fila, se resalta
+    - "table-dark"       → En thead: cabecera con fondo oscuro
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.6  FORMULARIOS
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu peliculas/create.php:
+
+      <div class="mb-3">
+          <label for="titulo" class="form-label">Título</label>
+          <input type="text" class="form-control" id="titulo" name="titulo">
+      </div>
+
+      <div class="mb-3">
+          <label for="categoria_id" class="form-label">Categoría</label>
+          <select class="form-select" id="categoria_id" name="categoria_id">
+              <option>-- Seleccionar --</option>
+          </select>
+      </div>
+
+      <div class="form-check">
+          <input class="form-check-input" type="checkbox" ...>
+          <label class="form-check-label" ...>Acción</label>
+      </div>
+
+  Desglose:
+    - "mb-3"              → Margen inferior entre campos del formulario
+    - "form-label"        → Estilo para la etiqueta (label) del campo
+    - "form-control"      → Estilo para inputs y textareas (borde, padding,
+                            ancho completo)
+    - "form-select"       → Estilo para <select> (desplegables)
+    - "form-check"        → Contenedor para checkbox/radio
+    - "form-check-input"  → Estilo para el checkbox/radio en sí
+    - "form-check-label"  → Estilo para la etiqueta del checkbox
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.7  BOTONES
+  ─────────────────────────────────────────────────────────────────────────
+
+  Ejemplos de tu proyecto:
+
+      <!-- Botón azul (acción principal) -->
+      <button class="btn btn-primary">
+          <i class="fa fa-save"></i> Guardar
+      </button>
+
+      <!-- Botón gris (volver atrás) -->
+      <a href="..." class="btn btn-secondary">
+          <i class="fa fa-arrow-left"></i> Volver
+      </a>
+
+      <!-- Botón amarillo pequeño (editar) -->
+      <a href="..." class="btn btn-sm btn-warning">
+          <i class="fa fa-edit"></i>
+      </a>
+
+      <!-- Botón rojo pequeño (eliminar) -->
+      <button class="btn btn-sm btn-danger">
+          <i class="fa fa-trash"></i>
+      </button>
+
+      <!-- Botón oscuro ancho (filtrar) -->
+      <button class="btn btn-dark w-100">Filtrar</button>
+
+      <!-- Botón con borde (sin relleno) -->
+      <a href="..." class="btn btn-outline-secondary w-100">Limpiar</a>
+
+  Desglose:
+    - "btn"                  → Clase base de botón (obligatoria)
+    - "btn-primary"          → Azul (acción principal)
+    - "btn-secondary"        → Gris (acción secundaria)
+    - "btn-success"          → Verde (éxito)
+    - "btn-danger"           → Rojo (peligro/eliminar)
+    - "btn-warning"          → Amarillo (advertencia/editar)
+    - "btn-dark"             → Oscuro/negro
+    - "btn-outline-secondary"→ Solo borde, sin relleno
+    - "btn-sm"               → Tamaño pequeño
+    - "w-100"                → Width 100% (ocupa todo el ancho)
+    - "d-grid"               → Hace que el botón ocupe todo el ancho (flex)
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.8  ALERTAS (MENSAJES)
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu layout/main.php:
+
+      <?php if (session()->getFlashdata('mensaje')): ?>
+          <div class="alert alert-success alert-dismissible fade show">
+              <?= session()->getFlashdata('mensaje') ?>
+              <button type="button" class="btn-close" data-bs-dismiss="alert">
+              </button>
+          </div>
+      <?php endif; ?>
+
+  Desglose:
+    - "alert"              → Componente alerta
+    - "alert-success"      → Color verde (éxito)
+    - "alert-danger"       → Color rojo (error)
+    - "alert-dismissible"  → Permite cerrar la alerta con el botón X
+    - "fade show"          → Animación de aparición/desaparición
+    - "btn-close"          → El botón X para cerrar
+    - "data-bs-dismiss"    → Atributo JS de Bootstrap que cierra la alerta
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.9  BADGES (ETIQUETAS/INSIGNIAS)
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu layout/main.php (rol del usuario en la navbar):
+
+      <span class="badge bg-success">ADMIN</span>
+      <span class="badge bg-info">USUARIO</span>
+
+  En tu peliculas/index.php (categoría de una película):
+
+      <span class="badge bg-primary"><?= esc($pelicula['categoria_nombre']) ?></span>
+
+  Desglose:
+    - "badge"      → Pequeña etiqueta redondeada con fondo de color
+    - "bg-success" → Fondo verde
+    - "bg-info"    → Fondo celeste
+    - "bg-primary" → Fondo azul
+    - "bg-secondary" → Fondo gris
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.10  UTILIDADES DE DISPLAY Y FLEXBOX
+  ─────────────────────────────────────────────────────────────────────────
+
+  En tu peliculas/index.php:
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+          <h1>Películas</h1>
+          <a href="..." class="btn btn-primary">Nueva Película</a>
+      </div>
+
+  Desglose:
+    - "d-flex"                → Display: flex (activa flexbox)
+    - "justify-content-between" → Separa los hijos a los extremos
+                                  (título a la izquierda, botón a la derecha)
+    - "align-items-center"    → Alinea verticalmente al centro
+    - "d-inline"              → Display: inline (formulario de eliminar en línea
+                                con el botón de editar)
+    - "d-grid"                → Display: grid
+
+  En tu paginación:
+
+      <div class="d-flex justify-content-center mt-3">
+          <?= $pager->links() ?>
+      </div>
+
+    - "justify-content-center" → Centra los enlaces de paginación
+
+  ─────────────────────────────────────────────────────────────────────────
+  3.4.11  COLORES DE TEXTO
+  ─────────────────────────────────────────────────────────────────────────
+
+    - "text-white"   → Texto blanco
+    - "text-danger"  → Texto rojo (usado en "Salir" del menú)
+    - "text-muted"   → Texto gris suave (usado en "Sin categoría")
+    - "text-center"  → Texto centrado
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: FONT AWESOME (ÍCONOS)
+████████████████████████████████████████████████████████████████████████████████
+
+  Además de Bootstrap, tu proyecto usa Font Awesome 6 para los íconos.
+  Se carga en el layout:
+
+      <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+            rel="stylesheet">
+
+  Para usar un ícono, se usa un tag <i> con clases:
+
+      <i class="fa fa-film"></i>        → Ícono de película 🎬
+      <i class="fa fa-tags"></i>        → Ícono de etiquetas 🏷️
+      <i class="fa fa-plus"></i>        → Ícono de + (crear)
+      <i class="fa fa-edit"></i>        → Ícono de lápiz (editar)
+      <i class="fa fa-trash"></i>       → Ícono de papelera (eliminar)
+      <i class="fa fa-save"></i>        → Ícono de disquete (guardar)
+      <i class="fa fa-arrow-left"></i>  → Ícono de flecha (volver)
+      <i class="fa fa-user"></i>        → Ícono de usuario
+      <i class="fa fa-sign-in-alt"></i> → Ícono de entrar
+      <i class="fa fa-sign-out-alt"></i>→ Ícono de salir
+      <i class="fa fa-search"></i>      → Ícono de lupa (buscar)
+      <i class="fa fa-filter"></i>      → Ícono de embudo (filtrar)
+
+  Font Awesome NO es parte de Bootstrap. Son dos librerías independientes
+  que se complementan.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: FUNCIONES ESPECIALES DE CI4 EN LAS VISTAS
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  5.1 base_url()
+================================================================================
+
+  Genera la URL base de tu aplicación. Ejemplo:
+
+      base_url('/peliculas')  →  https://tu-dominio.com/peliculas
+
+  Se usa en TODOS los enlaces y formularios de tus vistas:
+
+      <a href="<?= base_url('/peliculas') ?>">Películas</a>
+      <form action="<?= base_url('/peliculas/store') ?>" method="POST">
+
+  ¿Por qué no poner directamente "/peliculas"?
+  Porque si la app no está en la raíz del dominio (ej: dominio.com/mi-app/),
+  base_url() añade el prefijo correcto automáticamente.
+
+================================================================================
+  5.2 esc()
+================================================================================
+
+  Escapa caracteres peligrosos para prevenir ataques XSS:
+
+      <?= esc($pelicula['titulo']) ?>
+
+  Convierte < > " ' & en entidades HTML seguras.
+
+================================================================================
+  5.3 old()
+================================================================================
+
+  Recupera el valor anterior de un campo tras un error de validación:
+
+      <input value="<?= old('titulo') ?>">
+
+  En edición, acepta un segundo parámetro como valor por defecto:
+
+      <input value="<?= old('titulo', esc($pelicula['titulo'])) ?>">
+
+  Esto dice: "Si hay un valor anterior del formulario (old), úsalo.
+  Si no, usa el valor actual de la base de datos."
+
+================================================================================
+  5.4 csrf_field()
+================================================================================
+
+  Genera un campo oculto con un token de seguridad:
+
+      <?= csrf_field() ?>
+      → <input type="hidden" name="csrf_test_name" value="abc123...">
+
+  Este token protege contra ataques CSRF (Cross-Site Request Forgery),
+  que es cuando un sitio malicioso intenta enviar formularios en tu nombre.
+
+================================================================================
+  5.5 session()->getFlashdata()
+================================================================================
+
+  Lee un dato "flash" de la sesión. Un flashdata es un dato que solo
+  existe durante UNA petición y luego se borra automáticamente.
+
+  El controlador lo crea con:
+      redirect()->to('/peliculas')->with('mensaje', 'Creada correctamente');
+
+  La vista lo lee con:
+      session()->getFlashdata('mensaje')  → 'Creada correctamente'
+
+  En la siguiente petición, el flashdata ya no existe.
+
+================================================================================
+  5.6 session()->get()
+================================================================================
+
+  Lee un dato permanente de la sesión (no se borra entre peticiones):
+
+      session()->get('logueado')        → true o null
+      session()->get('usuario_nombre')  → 'Juan'
+      session()->get('usuario_rol')     → 'admin'
+
+  Se usa en el layout para mostrar/ocultar el menú según el estado de login.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 6: FLUJO COMPLETO - EJEMPLO DE PRINCIPIO A FIN
+████████████████████████████████████████████████████████████████████████████████
+
+  Vamos a seguir el recorrido completo cuando un usuario logueado
+  visita /peliculas/create:
+
+  PASO 1 - PETICIÓN
+  El usuario hace clic en "Nueva Película".
+  El navegador envía: GET /peliculas/create
+
+  PASO 2 - RUTA
+  CI4 busca en Routes.php:
+      $routes->get('/peliculas/create', 'Pelicula::create');
+
+  PASO 3 - FILTRO
+  Antes de ejecutar el controlador, revisa Filters.php.
+  'peliculas/*' coincide → ejecuta AuthFilter::before().
+  El usuario está logueado → continúa.
+
+  PASO 4 - CONTROLADOR
+  Se ejecuta Pelicula::create():
+
+      public function create()
+      {
+          $datos['titulo'] = 'Crear Película';
+          $datos['categorias'] = $this->categoriaModel->findAll();
+          $datos['etiquetas'] = $this->etiquetaModel->findAll();
+
+          return view('peliculas/create', $datos);
+      }
+
+  El controlador:
+    a) Pide las categorías al modelo → SELECT * FROM categorias
+    b) Pide las etiquetas al modelo → SELECT * FROM etiquetas
+    c) Mete todo en un array $datos
+    d) Llama a view() pasando los datos
+
+  PASO 5 - VISTA
+  CI4 procesa peliculas/create.php:
+
+    a) Ve $this->extend('layout/main') → sabe que debe usar el layout
+    b) Procesa la section('contenido'):
+       - $titulo vale 'Crear Película'
+       - $categorias contiene las categorías de la BD
+       - $etiquetas contiene las etiquetas de la BD
+       - Genera el HTML del formulario con esos datos
+
+  PASO 6 - LAYOUT
+  CI4 procesa layout/main.php:
+    a) Genera el <head> con Bootstrap y Font Awesome
+    b) Genera la navbar con el menú
+    c) Genera los mensajes flash (si los hay)
+    d) Llega a renderSection('contenido') → inserta el HTML del formulario
+    e) Genera el cierre con el JS de Bootstrap
+
+  PASO 7 - RESPUESTA
+  CI4 envía el HTML completo al navegador.
+  El navegador lo renderiza: el usuario ve la página con la navbar,
+  el formulario con los campos, los selects con categorías, etc.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 7: RESUMEN VISUAL FINAL
+████████████████████████████████████████████████████████████████████████████████
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                    ARQUITECTURA DE VISTAS                           │
+  │                                                                     │
+  │   CONTROLADOR                                                       │
+  │   ┌─────────────────────────────────┐                               │
+  │   │ $datos = [                      │                               │
+  │   │   'titulo' => 'Películas',      │                               │
+  │   │   'peliculas' => [...],         │                               │
+  │   │ ];                              │                               │
+  │   │ return view('peliculas/index',  │                               │
+  │   │              $datos);           │                               │
+  │   └──────────────┬──────────────────┘                               │
+  │                  │                                                   │
+  │                  ▼                                                   │
+  │   VISTA HIJA (peliculas/index.php)                                  │
+  │   ┌─────────────────────────────────┐                               │
+  │   │ extend('layout/main')           │──── HEREDA DEL LAYOUT         │
+  │   │                                 │                               │
+  │   │ section('contenido')            │                               │
+  │   │   HTML con $titulo, $peliculas  │──── USA LAS VARIABLES         │
+  │   │   Clases Bootstrap para estilos │──── BOOTSTRAP DA EL DISEÑO    │
+  │   │   Íconos Font Awesome           │──── FONT AWESOME DA ÍCONOS    │
+  │   │ endSection()                    │                               │
+  │   └──────────────┬──────────────────┘                               │
+  │                  │                                                   │
+  │                  ▼                                                   │
+  │   LAYOUT (layout/main.php)                                          │
+  │   ┌─────────────────────────────────┐                               │
+  │   │ <!DOCTYPE html>                 │                               │
+  │   │ <head> CSS Bootstrap + FA </head>                               │
+  │   │ <nav> Menú de navegación </nav> │                               │
+  │   │ Mensajes flash                  │                               │
+  │   │ renderSection('contenido') ◄────│──── INSERTA LA VISTA HIJA     │
+  │   │ <script> JS Bootstrap </script> │                               │
+  │   │ </html>                         │                               │
+  │   └──────────────┬──────────────────┘                               │
+  │                  │                                                   │
+  │                  ▼                                                   │
+  │   PÁGINA HTML COMPLETA → NAVEGADOR                                  │
+  └─────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+  Generado automáticamente para referencia del proyecto.
+================================================================================

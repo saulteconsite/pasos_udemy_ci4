@@ -1,0 +1,614 @@
+================================================================================
+  SECCIONES 20-21: CODEIGNITER SHIELD - AUTENTICACIÓN, GRUPOS Y PERMISOS
+  Proyecto Udemy - Explicación detallada
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ ES CODEIGNITER SHIELD?
+████████████████████████████████████████████████████████████████████████████████
+
+  CodeIgniter Shield es el PAQUETE OFICIAL de autenticación y autorización
+  para CodeIgniter 4, mantenido por el mismo equipo del framework.
+
+  En nuestro proyecto ya creamos un sistema de login MANUAL:
+    - AuthFilter.php      → Verifica si hay sesión activa
+    - AdminFilter.php     → Verifica si el usuario es admin
+    - Auth.php            → Controlador con login/registro/logout
+    - UsuarioModel.php    → Modelo con hasheo de contraseñas
+
+  Shield hace TODO eso y MUCHO MÁS de forma automática y segura:
+
+  ┌─────────────────────────┬──────────────────┬─────────────────────────┐
+  │ Funcionalidad           │ Manual (actual)  │ Con Shield              │
+  ├─────────────────────────┼──────────────────┼─────────────────────────┤
+  │ Login/Registro          │ Lo hicimos       │ Ya viene hecho          │
+  │ Hash de contraseñas     │ beforeInsert     │ Automático              │
+  │ Recordar sesión         │ No tenemos       │ "Remember me" incluido  │
+  │ Recuperar contraseña    │ No tenemos       │ Email + token incluido  │
+  │ Verificar email         │ No tenemos       │ Incluido                │
+  │ Bloqueo por intentos    │ No tenemos       │ Throttling incluido     │
+  │ Auth por tokens (API)   │ No tenemos       │ Personal Access Tokens  │
+  │ Grupos de usuarios      │ Solo "admin/user"│ Sistema completo        │
+  │ Permisos granulares     │ No tenemos       │ Sistema completo        │
+  │ Magic links             │ No tenemos       │ Login sin contraseña    │
+  └─────────────────────────┴──────────────────┴─────────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: INSTALACIÓN DE SHIELD
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  1.1 INSTALAR CON COMPOSER
+================================================================================
+
+  Ejecutamos en la terminal (dentro del contenedor DDEV):
+
+    ddev ssh
+    cd /var/www/html
+    composer require codeigniter4/shield
+
+  O desde fuera del contenedor:
+
+    ddev composer require codeigniter4/shield
+
+  Esto descarga Shield y sus dependencias en la carpeta vendor/.
+
+
+================================================================================
+  1.2 EJECUTAR EL SETUP AUTOMÁTICO
+================================================================================
+
+  Shield viene con un comando spark para configurar todo automáticamente:
+
+    php spark shield:setup
+
+  Este comando hace lo siguiente:
+    1. Publica los archivos de configuración en app/Config/
+    2. Crea las migraciones para las tablas de Shield
+    3. Configura Auth.php, AuthGroups.php, AuthToken.php
+    4. Modifica Routes.php para añadir las rutas de auth
+    5. Actualiza Filters.php para registrar los filtros de Shield
+
+  ARCHIVOS QUE CREA/MODIFICA:
+  ──────────────────────────
+    app/Config/Auth.php          ← Configuración general de autenticación
+    app/Config/AuthGroups.php    ← Definición de grupos y permisos
+    app/Config/AuthToken.php     ← Configuración de tokens para API
+
+  TABLAS QUE CREA (al ejecutar php spark migrate):
+  ────────────────────────────────────────────────
+    auth_identities         → Emails, tokens, etc. del usuario
+    auth_logins             → Registro de inicios de sesión
+    auth_remember_tokens    → Tokens para "recordarme"
+    auth_groups_users       → Relación usuario-grupo
+    auth_permissions_users  → Relación usuario-permiso
+    users                   → Tabla de usuarios de Shield
+
+
+================================================================================
+  1.3 EJECUTAR LAS MIGRACIONES
+================================================================================
+
+  Una vez configurado, creamos las tablas en la base de datos:
+
+    php spark migrate
+
+  O con DDEV:
+
+    ddev exec php spark migrate
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: CÓMO FUNCIONA LA AUTENTICACIÓN CON SHIELD
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 EL MODELO DE USUARIO DE SHIELD
+================================================================================
+
+  Shield tiene su propio modelo de usuario. Ya NO usamos nuestro UsuarioModel.
+  El modelo de Shield es:
+
+    CodeIgniter\Shield\Models\UserModel
+
+  Y la entidad de usuario es:
+
+    CodeIgniter\Shield\Entities\User
+
+  En vez de arrays simples, Shield trabaja con ENTIDADES (objetos):
+
+    // ANTES (nuestro sistema manual):
+    $usuario = $this->usuarioModel->where('email', $email)->first();
+    // $usuario es un ARRAY: $usuario['nombre'], $usuario['email']
+
+    // CON SHIELD:
+    $usuario = auth()->user();
+    // $usuario es un OBJETO: $usuario->username, $usuario->email
+
+
+================================================================================
+  2.2 FUNCIONES HELPER DE SHIELD
+================================================================================
+
+  Shield proporciona funciones helper globales muy útiles:
+
+  ┌────────────────────────────────┬──────────────────────────────────────────┐
+  │ Función                        │ ¿Qué hace?                               │
+  ├────────────────────────────────┼──────────────────────────────────────────┤
+  │ auth()                         │ Devuelve la instancia del servicio Auth  │
+  │ auth()->loggedIn()             │ ¿Está logueado? (true/false)             │
+  │ auth()->user()                 │ Devuelve el objeto User del usuario      │
+  │ auth()->user()->id             │ ID del usuario logueado                  │
+  │ auth()->user()->username       │ Nombre de usuario                        │
+  │ auth()->user()->email          │ Email del usuario                        │
+  │ auth()->user()->inGroup('x')   │ ¿Pertenece al grupo 'x'?                │
+  │ auth()->user()->can('x')       │ ¿Tiene el permiso 'x'?                  │
+  │ auth()->id()                   │ Atajo para auth()->user()->id            │
+  └────────────────────────────────┴──────────────────────────────────────────┘
+
+  COMPARACIÓN CON NUESTRO SISTEMA ACTUAL:
+  ──────────────────────────────────────
+
+    // ANTES (nuestro sistema manual con sesión):
+    if (session()->get('logueado')) { ... }
+    $nombre = session()->get('usuario_nombre');
+    $rol    = session()->get('usuario_rol');
+
+    // CON SHIELD:
+    if (auth()->loggedIn()) { ... }
+    $nombre = auth()->user()->username;
+    $grupo  = auth()->user()->getGroups();  // ['admin', 'editor', ...]
+
+
+================================================================================
+  2.3 RUTAS AUTOMÁTICAS DE SHIELD
+================================================================================
+
+  Shield registra automáticamente estas rutas:
+
+  ┌──────────────────┬──────────┬──────────────────────────────┐
+  │ Ruta             │ Método   │ ¿Qué hace?                   │
+  ├──────────────────┼──────────┼──────────────────────────────┤
+  │ /register        │ GET      │ Formulario de registro       │
+  │ /register        │ POST     │ Procesar registro            │
+  │ /login           │ GET      │ Formulario de login          │
+  │ /login           │ POST     │ Procesar login               │
+  │ /logout          │ GET      │ Cerrar sesión                │
+  │ /auth/a/show     │ GET      │ Código de activación         │
+  └──────────────────┴──────────┴──────────────────────────────┘
+
+  IMPORTANTE: Si ya tienes rutas /login o /register propias, las de
+  Shield las sobreescribirán. Puedes personalizarlas en Auth.php.
+
+
+================================================================================
+  2.4 PROTEGER RUTAS CON SHIELD (FILTROS)
+================================================================================
+
+  Shield registra sus propios filtros. Ya no necesitas AuthFilter.php manual.
+
+  ARCHIVO: app/Config/Filters.php (AUTOMÁTICO CON shield:setup)
+  ─────────────────────────────────────────────────────────────
+
+    public array $aliases = [
+        // ...los filtros del framework...
+        'session'  => \CodeIgniter\Shield\Filters\SessionFilter::class,
+        'tokens'   => \CodeIgniter\Shield\Filters\TokenFilter::class,
+        'chain'    => \CodeIgniter\Shield\Filters\ChainFilter::class,
+        'group'    => \CodeIgniter\Shield\Filters\GroupFilter::class,
+        'permission' => \CodeIgniter\Shield\Filters\PermissionFilter::class,
+    ];
+
+  APLICAR POR RUTA:
+
+    public array $filters = [
+        // Requiere que el usuario tenga sesión activa
+        'session' => ['before' => [
+            'peliculas',
+            'peliculas/*',
+            'categorias',
+            'categorias/*',
+        ]],
+
+        // Requiere que el usuario pertenezca al grupo 'admin'
+        'group:admin' => ['before' => [
+            'admin/*',
+        ]],
+
+        // Requiere que el usuario tenga el permiso 'peliculas.delete'
+        'permission:peliculas.delete' => ['before' => [
+            'peliculas/delete/*',
+        ]],
+    ];
+
+  TAMBIÉN SE PUEDE APLICAR DIRECTAMENTE EN LAS RUTAS:
+
+    $routes->get('peliculas', 'Pelicula::index', ['filter' => 'session']);
+    $routes->get('admin/panel', 'Admin::panel', ['filter' => 'group:admin']);
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: GRUPOS Y PERMISOS (SECCIÓN 21)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  3.1 ¿QUÉ SON LOS GRUPOS?
+================================================================================
+
+  Un GRUPO es un ROL con un conjunto de permisos. Un usuario puede pertenecer
+  a uno o varios grupos.
+
+  Ejemplo del proyecto:
+    - admin    → Puede hacer todo (CRUD completo, gestionar usuarios)
+    - editor   → Puede crear y editar, pero no eliminar
+    - usuario  → Solo puede ver (lectura)
+
+  ANTES (nuestro sistema manual):
+    Guardábamos el rol como texto en el campo 'rol' de la tabla usuarios.
+    Solo teníamos 'admin' y 'usuario', sin permisos granulares.
+
+  CON SHIELD:
+    Los grupos se definen en un archivo de configuración y se asignan
+    dinámicamente. Cada grupo tiene permisos específicos.
+
+
+================================================================================
+  3.2 CONFIGURAR GRUPOS Y PERMISOS
+================================================================================
+
+  ARCHIVO: app/Config/AuthGroups.php
+  ──────────────────────────────────
+
+    <?php
+    namespace Config;
+
+    use CodeIgniter\Shield\Config\AuthGroups as ShieldAuthGroups;
+
+    class AuthGroups extends ShieldAuthGroups
+    {
+        // DEFINICIÓN DE GRUPOS
+        public array $groups = [
+            'superadmin' => [
+                'title'       => 'Super Administrador',
+                'description' => 'Control total del sistema.',
+            ],
+            'admin' => [
+                'title'       => 'Administrador',
+                'description' => 'Gestión completa del contenido.',
+            ],
+            'editor' => [
+                'title'       => 'Editor',
+                'description' => 'Puede crear y editar contenido.',
+            ],
+            'usuario' => [
+                'title'       => 'Usuario',
+                'description' => 'Solo puede ver contenido.',
+            ],
+        ];
+
+        // DEFINICIÓN DE PERMISOS
+        public array $permissions = [
+            'peliculas.ver'      => 'Ver listado de películas',
+            'peliculas.crear'    => 'Crear nuevas películas',
+            'peliculas.editar'   => 'Editar películas existentes',
+            'peliculas.eliminar' => 'Eliminar películas',
+            'categorias.ver'     => 'Ver listado de categorías',
+            'categorias.crear'   => 'Crear nuevas categorías',
+            'categorias.editar'  => 'Editar categorías existentes',
+            'categorias.eliminar'=> 'Eliminar categorías',
+            'usuarios.gestionar' => 'Gestionar cuentas de usuario',
+            'admin.panel'        => 'Acceder al panel de administración',
+        ];
+
+        // MATRIZ: QUÉ PERMISOS TIENE CADA GRUPO
+        public array $matrix = [
+            'superadmin' => [
+                'peliculas.ver', 'peliculas.crear', 'peliculas.editar', 'peliculas.eliminar',
+                'categorias.ver', 'categorias.crear', 'categorias.editar', 'categorias.eliminar',
+                'usuarios.gestionar', 'admin.panel',
+            ],
+            'admin' => [
+                'peliculas.ver', 'peliculas.crear', 'peliculas.editar', 'peliculas.eliminar',
+                'categorias.ver', 'categorias.crear', 'categorias.editar', 'categorias.eliminar',
+                'admin.panel',
+            ],
+            'editor' => [
+                'peliculas.ver', 'peliculas.crear', 'peliculas.editar',
+                'categorias.ver', 'categorias.crear', 'categorias.editar',
+            ],
+            'usuario' => [
+                'peliculas.ver',
+                'categorias.ver',
+            ],
+        ];
+    }
+
+  EXPLICACIÓN DE LA MATRIZ:
+  ────────────────────────
+
+  La matriz define la RELACIÓN entre grupos y permisos:
+
+    superadmin → TODOS los permisos (incluido gestionar usuarios)
+    admin      → Todo excepto gestionar otros usuarios
+    editor     → Crear y editar, pero NO eliminar ni acceder al panel admin
+    usuario    → SOLO ver (lectura)
+
+
+================================================================================
+  3.3 ASIGNAR USUARIOS A GRUPOS
+================================================================================
+
+  Podemos asignar grupos por código:
+
+    // Obtener un usuario por ID
+    $usuario = auth()->getProvider()->findById(1);
+
+    // Añadir al grupo 'admin'
+    $usuario->addGroup('admin');
+
+    // Añadir a varios grupos a la vez
+    $usuario->addGroup('admin', 'editor');
+
+    // Quitar de un grupo
+    $usuario->removeGroup('editor');
+
+    // Sincronizar grupos (quita todos y pone los nuevos)
+    $usuario->syncGroups('admin');
+
+    // Ver grupos del usuario
+    $grupos = $usuario->getGroups();  // ['admin']
+
+
+================================================================================
+  3.4 ASIGNAR PERMISOS INDIVIDUALES
+================================================================================
+
+  Además de los permisos que vienen por grupo, se pueden asignar permisos
+  INDIVIDUALES directamente a un usuario:
+
+    // Dar un permiso extra a un usuario
+    $usuario->addPermission('peliculas.eliminar');
+
+    // Quitar un permiso individual
+    $usuario->removePermission('peliculas.eliminar');
+
+    // Ver todos los permisos (de grupos + individuales)
+    $permisos = $usuario->getPermissions();
+
+
+================================================================================
+  3.5 VERIFICAR PERMISOS EN EL CÓDIGO
+================================================================================
+
+  EN EL CONTROLADOR:
+  ─────────────────
+
+    public function delete($id = null)
+    {
+        // Verificar si el usuario puede eliminar películas
+        if (!auth()->user()->can('peliculas.eliminar')) {
+            return redirect()->back()->with('error', 'NO TIENES PERMISO PARA ELIMINAR.');
+        }
+
+        // ... código de eliminación ...
+    }
+
+  EN LA VISTA (para mostrar/ocultar botones):
+  ───────────────────────────────────────────
+
+    <!-- Solo mostrar el botón de eliminar si tiene permiso -->
+    <?php if (auth()->user()->can('peliculas.eliminar')): ?>
+        <form action="..." method="POST" class="d-inline">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-sm btn-danger">
+                <i class="fa fa-trash"></i>
+            </button>
+        </form>
+    <?php endif; ?>
+
+    <!-- Solo mostrar el enlace de crear si tiene permiso -->
+    <?php if (auth()->user()->can('peliculas.crear')): ?>
+        <a href="<?= base_url('/peliculas/create') ?>" class="btn btn-primary">
+            <i class="fa fa-plus"></i> Nueva Película
+        </a>
+    <?php endif; ?>
+
+  VERIFICAR GRUPO:
+  ───────────────
+
+    // ¿El usuario es admin?
+    if (auth()->user()->inGroup('admin')) {
+        // Mostrar opciones de administración
+    }
+
+    // ¿El usuario es admin O editor?
+    if (auth()->user()->inGroup('admin', 'editor')) {
+        // Mostrar opciones de edición
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: AUTENTICACIÓN POR TOKENS (PARA LA API)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  4.1 ¿QUÉ SON LOS PERSONAL ACCESS TOKENS?
+================================================================================
+
+  Para proteger la API, Shield ofrece "Personal Access Tokens" (PAT).
+  Es como una contraseña larga que se envía en cada petición API.
+
+  FLUJO:
+    1. El usuario se autentica (login) y obtiene un token
+    2. En cada petición API, envía el token en el header Authorization
+    3. Shield verifica el token automáticamente
+
+
+================================================================================
+  4.2 GENERAR UN TOKEN
+================================================================================
+
+    // En un controlador de autenticación API:
+    public function loginApi()
+    {
+        // 1. Validar credenciales (email + password)
+        $credentials = [
+            'email'    => $this->request->getVar('email'),
+            'password' => $this->request->getVar('password'),
+        ];
+
+        $result = auth()->check($credentials);
+
+        if (!$result->isOK()) {
+            return $this->fail('CREDENCIALES INCORRECTAS', 401);
+        }
+
+        // 2. Generar token para el usuario
+        $user  = $result->extraInfo();
+        $token = $user->generateAccessToken('mi-app');
+
+        return $this->respond([
+            'status' => 200,
+            'token'  => $token->raw_token,  // Este es el token que usará el cliente
+        ]);
+    }
+
+
+================================================================================
+  4.3 USAR EL TOKEN EN LAS PETICIONES
+================================================================================
+
+  El cliente envía el token en el header:
+
+    Authorization: Bearer abc123def456...
+
+  Y en Config/Filters.php protegemos las rutas API:
+
+    'tokens' => ['before' => [
+        'api/*',
+    ]],
+
+  Shield verificará automáticamente el token en cada petición a /api/*.
+
+
+================================================================================
+  4.4 REVOCAR TOKENS
+================================================================================
+
+    // Revocar un token específico
+    $user->revokeAccessToken($tokenId);
+
+    // Revocar TODOS los tokens de un usuario
+    $user->revokeAllAccessTokens();
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: PERSONALIZAR LAS VISTAS DE SHIELD
+████████████████████████████████████████████████████████████████████████████████
+
+  Shield viene con vistas por defecto para login y registro, pero son muy
+  básicas. Podemos publicar las vistas para personalizarlas:
+
+    php spark shield:publish
+
+  Esto copia las vistas a:
+
+    app/Views/shield/login.php
+    app/Views/shield/register.php
+    app/Views/shield/magic_link_form.php
+    app/Views/shield/magic_link_message.php
+
+  Ahí podemos aplicar nuestro layout con Bootstrap 5, tal como hacemos
+  con las demás vistas del proyecto:
+
+    <!-- Ejemplo de login personalizado con nuestro layout -->
+    <?= $this->extend('layout/main') ?>
+    <?= $this->section('contenido') ?>
+
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h4><i class="fa fa-sign-in-alt"></i> Iniciar Sesión</h4>
+                </div>
+                <div class="card-body">
+                    <form action="<?= url_to('login') ?>" method="POST">
+                        <?= csrf_field() ?>
+                        <!-- campos del formulario con clases Bootstrap -->
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?= $this->endSection() ?>
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 6: COMPARACIÓN - SISTEMA MANUAL vs SHIELD
+████████████████████████████████████████████████████████████████████████████████
+
+  ┌─────────────────────┬──────────────────────────┬──────────────────────────┐
+  │ Aspecto             │ Manual (nuestro proyecto) │ Con Shield               │
+  ├─────────────────────┼──────────────────────────┼──────────────────────────┤
+  │ Tabla usuarios      │ usuarios (propia)         │ users + auth_identities  │
+  │ Hash password       │ beforeInsert callback     │ Automático (Argon2id)    │
+  │ Verificar login     │ session()->get('logueado')│ auth()->loggedIn()       │
+  │ Obtener usuario     │ session()->get('nombre')  │ auth()->user()->username │
+  │ Verificar rol       │ session('usuario_rol')    │ auth()->user()->inGroup()│
+  │ Permisos            │ No hay (solo rol)         │ can(), addPermission()   │
+  │ Proteger rutas      │ AuthFilter/AdminFilter    │ session, group, tokens   │
+  │ Login por email     │ Formulario manual         │ Magic Links disponible   │
+  │ Intentos fallidos   │ No hay control            │ Throttle automático      │
+  │ Recordarme          │ No implementado           │ Checkbox "Remember me"   │
+  │ API tokens          │ No implementado           │ Personal Access Tokens   │
+  │ Recuperar password  │ No implementado           │ Email con token          │
+  └─────────────────────┴──────────────────────────┴──────────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 7: ADAPTAR NUESTRO LAYOUT PARA SHIELD
+████████████████████████████████████████████████████████████████████████████████
+
+  En el layout (app/Views/layout/main.php) cambiaríamos las comprobaciones
+  de sesión por las funciones de Shield:
+
+  ANTES:
+    <?php if (session()->get('logueado')): ?>
+        <span class="nav-link">
+            <?= esc(session()->get('usuario_nombre')) ?>
+            <span class="badge <?= session()->get('usuario_rol') === 'admin' ? 'bg-success' : 'bg-info' ?>">
+                <?= esc(strtoupper(session()->get('usuario_rol'))) ?>
+            </span>
+        </span>
+    <?php endif; ?>
+
+  CON SHIELD:
+    <?php if (auth()->loggedIn()): ?>
+        <span class="nav-link">
+            <?= esc(auth()->user()->username) ?>
+            <?php foreach (auth()->user()->getGroups() as $grupo): ?>
+                <span class="badge bg-success"><?= strtoupper($grupo) ?></span>
+            <?php endforeach; ?>
+        </span>
+    <?php endif; ?>
+
+
+████████████████████████████████████████████████████████████████████████████████
+  RESUMEN
+████████████████████████████████████████████████████████████████████████████████
+
+  1. Shield es el paquete OFICIAL de auth para CodeIgniter 4
+  2. Se instala con: composer require codeigniter4/shield
+  3. Se configura con: php spark shield:setup
+  4. Reemplaza nuestro sistema manual de login con algo más robusto
+  5. Grupos = roles (admin, editor, usuario)
+  6. Permisos = acciones específicas (peliculas.eliminar)
+  7. La matriz conecta qué permisos tiene cada grupo
+  8. auth()->user()->can('permiso') verifica permisos
+  9. auth()->user()->inGroup('grupo') verifica grupo
+  10. Personal Access Tokens protegen la API
+
+================================================================================

@@ -1,0 +1,871 @@
+================================================================================
+  SECCIÓN 25: CREAR NUESTRO PROPIO SISTEMA DE CRUD AUTOMATIZADO
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ ES UN CRUD AUTOMATIZADO?
+████████████████████████████████████████████████████████████████████████████████
+
+  En nuestro proyecto hemos creado 3 CRUDs (Películas, Categorías, Etiquetas)
+  y los 3 siguen EXACTAMENTE el mismo patrón:
+
+    1. Un MODELO con tabla, campos, validación
+    2. Un CONTROLADOR con index(), create(), store(), edit(), update(), delete()
+    3. VISTAS: index.php, create.php, edit.php
+    4. RUTAS: GET/POST para cada operación
+
+  La idea de esta sección es: en vez de copiar/pegar y adaptar código para
+  cada nueva entidad, creamos un sistema que GENERA el CRUD automáticamente.
+
+  OBJETIVO FINAL:
+    Con un solo comando o configuración, generar un CRUD completo para
+    cualquier entidad (Producto, Cliente, Factura, etc.) sin escribir
+    código repetitivo.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: ANÁLISIS DEL PATRÓN REPETIDO
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  1.1 LO QUE SE REPITE EN CADA CRUD
+================================================================================
+
+  Veamos lo que tienen en COMÚN los controladores Pelicula, Categoria y Etiqueta:
+
+  ┌─────────────────────────┬──────────────────────────────────────────────────┐
+  │ Método                  │ Patrón idéntico en los 3 controladores           │
+  ├─────────────────────────┼──────────────────────────────────────────────────┤
+  │ index()                 │ Obtener todos → Pasar a vista → Cargar listado  │
+  │ create()                │ Preparar datos → Cargar formulario de creación  │
+  │ store()                 │ Leer POST → Validar → Guardar → Redirigir       │
+  │ edit($id)               │ Buscar por ID → Cargar formulario de edición    │
+  │ update($id)             │ Buscar → Leer POST → Validar → Actualizar       │
+  │ delete($id)             │ Buscar → Eliminar → Redirigir con mensaje       │
+  └─────────────────────────┴──────────────────────────────────────────────────┘
+
+  LO QUE CAMBIA es:
+    - El nombre del modelo (PeliculaModel, CategoriaModel, EtiquetaModel)
+    - El nombre de las vistas (peliculas/, categorias/, etiquetas/)
+    - Los campos del formulario (titulo, descripcion, nombre, etc.)
+    - La URL base de redirección (/peliculas, /categorias, /etiquetas)
+
+
+================================================================================
+  1.2 EJEMPLO COMPARATIVO
+================================================================================
+
+  CATEGORÍA - store():                    ETIQUETA - store():
+  ──────────────────                      ──────────────────
+  $datos = [                              $datos = [
+    'titulo' => getPost('titulo'),          'nombre' => getPost('nombre'),
+  ];                                      ];
+  if (!$this->modelo->save($datos))       if (!$this->modelo->save($datos))
+    return redirect con errores;            return redirect con errores;
+  return redirect('/categorias');         return redirect('/etiquetas');
+
+  ¡ES PRÁCTICAMENTE IGUAL! Solo cambian los nombres de campos y rutas.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: CREAR UN CONTROLADOR BASE CRUD
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 LA IDEA: CONTROLADOR ABSTRACTO
+================================================================================
+
+  Creamos un controlador BASE que contiene TODA la lógica del CRUD.
+  Los controladores específicos solo definen la configuración (modelo,
+  vistas, campos).
+
+  ARCHIVO: app/Controllers/CrudController.php
+  ───────────────────────────────────────────
+
+    <?php
+    namespace App\Controllers;
+
+    use CodeIgniter\HTTP\ResponseInterface;
+
+    abstract class CrudController extends BaseController
+    {
+        // =============================================
+        // PROPIEDADES QUE CADA CONTROLADOR HIJO DEFINE
+        // =============================================
+
+        // Nombre completo del modelo (ej: 'App\Models\CategoriaModel')
+        protected string $modelClass = '';
+
+        // Instancia del modelo (se crea en el constructor)
+        protected $modelo;
+
+        // Prefijo de las vistas (ej: 'categorias' → busca en app/Views/categorias/)
+        protected string $vistasPrefijo = '';
+
+        // Prefijo de la URL para redirecciones (ej: '/categorias')
+        protected string $rutaBase = '';
+
+        // Título en singular para los mensajes (ej: 'Categoría')
+        protected string $tituloSingular = '';
+
+        // Título en plural para los mensajes (ej: 'Categorías')
+        protected string $tituloPlural = '';
+
+        // Nombre de la variable que se pasa a la vista en index (ej: 'categorias')
+        protected string $variableLista = '';
+
+        // Nombre de la variable que se pasa a la vista en edit (ej: 'categoria')
+        protected string $variableItem = '';
+
+        // Array con los nombres de los campos del formulario
+        // Ejemplo: ['titulo'] o ['titulo', 'descripcion']
+        protected array $campos = [];
+
+        // Número de registros por página (0 = sin paginación)
+        protected int $porPagina = 0;
+
+
+        // =============================================
+        // CONSTRUCTOR
+        // =============================================
+        public function __construct()
+        {
+            if (!empty($this->modelClass)) {
+                $this->modelo = new $this->modelClass();
+            }
+        }
+
+
+        // =============================================
+        // MÉTODO INDEX: LISTADO
+        // =============================================
+        public function index()
+        {
+            $datos['titulo'] = 'Listado de ' . $this->tituloPlural;
+
+            if ($this->porPagina > 0) {
+                $datos[$this->variableLista] = $this->modelo
+                    ->orderBy('id', 'DESC')
+                    ->paginate($this->porPagina);
+                $datos['pager'] = $this->modelo->pager;
+            } else {
+                $datos[$this->variableLista] = $this->modelo
+                    ->orderBy('id', 'DESC')
+                    ->findAll();
+            }
+
+            return view($this->vistasPrefijo . '/index', $datos);
+        }
+
+
+        // =============================================
+        // MÉTODO CREATE: FORMULARIO DE CREACIÓN
+        // =============================================
+        public function create()
+        {
+            $datos['titulo'] = 'Crear ' . $this->tituloSingular;
+
+            // Los controladores hijos pueden sobreescribir para añadir datos extra
+            $datos = $this->datosExtraFormulario($datos);
+
+            return view($this->vistasPrefijo . '/create', $datos);
+        }
+
+
+        // =============================================
+        // MÉTODO STORE: GUARDAR NUEVO REGISTRO
+        // =============================================
+        public function store()
+        {
+            // Recoger los campos del POST dinámicamente
+            $datos = [];
+            foreach ($this->campos as $campo) {
+                $valor = $this->request->getPost($campo);
+                // Si es campo nullable (ej: categoria_id), convertimos '' a null
+                $datos[$campo] = ($valor === '' || $valor === null) ? null : $valor;
+            }
+
+            // Los controladores hijos pueden añadir lógica extra (ej: subir imagen)
+            $datos = $this->antesDeGuardar($datos);
+            if ($datos instanceof ResponseInterface) {
+                return $datos;  // Si retorna una respuesta (redirect con error)
+            }
+
+            // Intentar guardar
+            if (!$this->modelo->save($datos)) {
+                return redirect()->back()->withInput()
+                    ->with('errors', $this->modelo->errors());
+            }
+
+            // Los controladores hijos pueden hacer algo después (ej: sincronizar etiquetas)
+            $this->despuesDeGuardar($this->modelo->getInsertID());
+
+            return redirect()->to(base_url($this->rutaBase))
+                ->with('mensaje', $this->tituloSingular . ' creado/a correctamente');
+        }
+
+
+        // =============================================
+        // MÉTODO EDIT: FORMULARIO DE EDICIÓN
+        // =============================================
+        public function edit($id = null)
+        {
+            $item = $this->modelo->find($id);
+            if ($item === null) {
+                throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound(
+                    'No se encontró el/la ' . $this->tituloSingular
+                );
+            }
+
+            $datos['titulo'] = 'Editar ' . $this->tituloSingular;
+            $datos[$this->variableItem] = $item;
+
+            $datos = $this->datosExtraFormulario($datos, $id);
+
+            return view($this->vistasPrefijo . '/edit', $datos);
+        }
+
+
+        // =============================================
+        // MÉTODO UPDATE: ACTUALIZAR REGISTRO
+        // =============================================
+        public function update($id = null)
+        {
+            $item = $this->modelo->find($id);
+            if ($item === null) {
+                throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound(
+                    'No se encontró el/la ' . $this->tituloSingular
+                );
+            }
+
+            $datos = [];
+            foreach ($this->campos as $campo) {
+                $valor = $this->request->getPost($campo);
+                $datos[$campo] = ($valor === '' || $valor === null) ? null : $valor;
+            }
+
+            $datos = $this->antesDeActualizar($datos, $item);
+            if ($datos instanceof ResponseInterface) {
+                return $datos;
+            }
+
+            if (!$this->modelo->update($id, $datos)) {
+                return redirect()->back()->withInput()
+                    ->with('errors', $this->modelo->errors());
+            }
+
+            $this->despuesDeActualizar($id);
+
+            return redirect()->to(base_url($this->rutaBase))
+                ->with('mensaje', $this->tituloSingular . ' actualizado/a correctamente');
+        }
+
+
+        // =============================================
+        // MÉTODO DELETE: ELIMINAR REGISTRO
+        // =============================================
+        public function delete($id = null)
+        {
+            $item = $this->modelo->find($id);
+            if ($item === null) {
+                throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound(
+                    'No se encontró el/la ' . $this->tituloSingular
+                );
+            }
+
+            // Los controladores hijos definen qué hacer antes de eliminar
+            // (ej: borrar imagen, borrar registros pivote)
+            $this->antesDeEliminar($id, $item);
+
+            $this->modelo->delete($id);
+
+            return redirect()->to(base_url($this->rutaBase))
+                ->with('mensaje', $this->tituloSingular . ' eliminado/a correctamente');
+        }
+
+
+        // =============================================
+        // MÉTODOS HOOK (para que los hijos los sobreescriban)
+        // =============================================
+
+        // Añadir datos extra al formulario (ej: lista de categorías para un select)
+        protected function datosExtraFormulario(array $datos, $id = null): array
+        {
+            return $datos;
+        }
+
+        // Lógica extra antes de guardar (ej: subir imagen)
+        protected function antesDeGuardar(array $datos)
+        {
+            return $datos;
+        }
+
+        // Lógica extra después de guardar (ej: sincronizar etiquetas)
+        protected function despuesDeGuardar($id): void
+        {
+        }
+
+        // Lógica extra antes de actualizar
+        protected function antesDeActualizar(array $datos, array $item)
+        {
+            return $datos;
+        }
+
+        // Lógica extra después de actualizar
+        protected function despuesDeActualizar($id): void
+        {
+        }
+
+        // Lógica extra antes de eliminar (ej: borrar imagen, borrar pivote)
+        protected function antesDeEliminar($id, array $item): void
+        {
+        }
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: USAR EL CONTROLADOR BASE
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  3.1 EJEMPLO: CRUD DE CATEGORÍAS (MÍNIMO CÓDIGO)
+================================================================================
+
+  ARCHIVO: app/Controllers/Categoria.php (SIMPLIFICADO)
+  ─────────────────────────────────────────────────────
+
+    <?php
+    namespace App\Controllers;
+
+    class Categoria extends CrudController
+    {
+        protected string $modelClass     = 'App\Models\CategoriaModel';
+        protected string $vistasPrefijo  = 'categorias';
+        protected string $rutaBase       = '/categorias';
+        protected string $tituloSingular = 'Categoría';
+        protected string $tituloPlural   = 'Categorías';
+        protected string $variableLista  = 'categorias';
+        protected string $variableItem   = 'categoria';
+        protected array  $campos         = ['titulo'];
+        protected int    $porPagina      = 10;
+    }
+
+  ¡ESO ES TODO! Con solo definir las propiedades, el CRUD completo funciona.
+  No necesitamos escribir los métodos index(), create(), store(), edit(),
+  update(), delete() porque los hereda de CrudController.
+
+  COMPARACIÓN:
+    ANTES: ~100 líneas de código por controlador CRUD
+    AHORA: ~15 líneas por controlador CRUD
+
+
+================================================================================
+  3.2 EJEMPLO: CRUD DE ETIQUETAS (TAMBIÉN MÍNIMO)
+================================================================================
+
+  ARCHIVO: app/Controllers/Etiqueta.php (SIMPLIFICADO)
+  ────────────────────────────────────────────────────
+
+    <?php
+    namespace App\Controllers;
+
+    class Etiqueta extends CrudController
+    {
+        protected string $modelClass     = 'App\Models\EtiquetaModel';
+        protected string $vistasPrefijo  = 'etiquetas';
+        protected string $rutaBase       = '/etiquetas';
+        protected string $tituloSingular = 'Etiqueta';
+        protected string $tituloPlural   = 'Etiquetas';
+        protected string $variableLista  = 'etiquetas';
+        protected string $variableItem   = 'etiqueta';
+        protected array  $campos         = ['nombre'];
+        protected int    $porPagina      = 10;
+
+        // Sobreescribimos antesDeEliminar para limpiar la tabla pivote
+        protected function antesDeEliminar($id, array $item): void
+        {
+            $pivote = new \App\Models\PeliculaEtiquetaModel();
+            $pivote->where('etiqueta_id', $id)->delete();
+        }
+    }
+
+
+================================================================================
+  3.3 EJEMPLO: CRUD DE PELÍCULAS (CON LÓGICA EXTRA)
+================================================================================
+
+  Películas es más complejo: tiene categorías, etiquetas, imagen.
+  Aquí es donde los HOOKS (métodos que sobreescribimos) brillan.
+
+  ARCHIVO: app/Controllers/Pelicula.php (SIMPLIFICADO)
+  ────────────────────────────────────────────────────
+
+    <?php
+    namespace App\Controllers;
+
+    use App\Models\CategoriaModel;
+    use App\Models\EtiquetaModel;
+    use App\Models\PeliculaEtiquetaModel;
+
+    class Pelicula extends CrudController
+    {
+        protected string $modelClass     = 'App\Models\PeliculaModel';
+        protected string $vistasPrefijo  = 'peliculas';
+        protected string $rutaBase       = '/peliculas';
+        protected string $tituloSingular = 'Película';
+        protected string $tituloPlural   = 'Películas';
+        protected string $variableLista  = 'peliculas';
+        protected string $variableItem   = 'pelicula';
+        protected array  $campos         = ['titulo', 'descripcion', 'categoria_id'];
+        protected int    $porPagina      = 5;
+
+        protected $categoriaModel;
+        protected $etiquetaModel;
+        protected $pivoteModel;
+
+        public function __construct()
+        {
+            parent::__construct();
+            $this->categoriaModel = new CategoriaModel();
+            $this->etiquetaModel = new EtiquetaModel();
+            $this->pivoteModel = new PeliculaEtiquetaModel();
+            helper('text');
+        }
+
+        // HOOK: Añadir categorías y etiquetas al formulario
+        protected function datosExtraFormulario(array $datos, $id = null): array
+        {
+            $datos['categorias'] = $this->categoriaModel->orderBy('titulo')->findAll();
+            $datos['etiquetas'] = $this->etiquetaModel->orderBy('nombre')->findAll();
+
+            if ($id !== null) {
+                $datos['etiquetasSeleccionadas'] = $this->pivoteModel
+                    ->getEtiquetasDePelicula($id);
+            }
+
+            return $datos;
+        }
+
+        // HOOK: Procesar imagen antes de guardar
+        protected function antesDeGuardar(array $datos)
+        {
+            return $this->procesarImagen($datos);
+        }
+
+        // HOOK: Sincronizar etiquetas después de guardar
+        protected function despuesDeGuardar($id): void
+        {
+            $etiquetas = $this->request->getPost('etiquetas') ?? [];
+            if (!empty($etiquetas)) {
+                $this->pivoteModel->sincronizar($id, $etiquetas);
+            }
+        }
+
+        // HOOK: Procesar imagen antes de actualizar
+        protected function antesDeActualizar(array $datos, array $item)
+        {
+            return $this->procesarImagen($datos, $item);
+        }
+
+        // HOOK: Sincronizar etiquetas después de actualizar
+        protected function despuesDeActualizar($id): void
+        {
+            $etiquetas = $this->request->getPost('etiquetas') ?? [];
+            $this->pivoteModel->sincronizar($id, $etiquetas);
+        }
+
+        // HOOK: Limpiar imagen y pivote antes de eliminar
+        protected function antesDeEliminar($id, array $item): void
+        {
+            if (!empty($item['imagen'])) {
+                $ruta = FCPATH . 'uploads/peliculas/' . $item['imagen'];
+                if (file_exists($ruta)) {
+                    unlink($ruta);
+                }
+            }
+            $this->pivoteModel->where('pelicula_id', $id)->delete();
+        }
+
+        // Método privado para procesar la imagen subida
+        private function procesarImagen(array $datos, ?array $itemAnterior = null)
+        {
+            $imagen = $this->request->getFile('imagen');
+
+            if ($imagen && $imagen->isValid() && !$imagen->hasMoved()) {
+                $reglas = [
+                    'imagen' => 'uploaded[imagen]|max_size[imagen,2048]|is_image[imagen]'
+                              . '|mime_in[imagen,image/jpg,image/jpeg,image/png,image/gif]',
+                ];
+
+                if (!$this->validate($reglas)) {
+                    return redirect()->back()->withInput()
+                        ->with('errors', $this->validator->getErrors());
+                }
+
+                // Eliminar imagen anterior si existe
+                if ($itemAnterior && !empty($itemAnterior['imagen'])) {
+                    $ruta = FCPATH . 'uploads/peliculas/' . $itemAnterior['imagen'];
+                    if (file_exists($ruta)) {
+                        unlink($ruta);
+                    }
+                }
+
+                $nuevoNombre = $imagen->getRandomName();
+                $imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
+                $datos['imagen'] = $nuevoNombre;
+            }
+
+            return $datos;
+        }
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: GENERAR RUTAS AUTOMÁTICAMENTE
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  4.1 FUNCIÓN PARA REGISTRAR RUTAS CRUD
+================================================================================
+
+  En vez de escribir 6 rutas por cada entidad, creamos una función helper
+  que las genera:
+
+  ARCHIVO: app/Config/Routes.php
+  ─────────────────────────────
+
+    // Función auxiliar para registrar rutas CRUD
+    function registrarCrud($routes, string $prefijo, string $controlador)
+    {
+        $routes->get("/{$prefijo}", "{$controlador}::index");
+        $routes->get("/{$prefijo}/create", "{$controlador}::create");
+        $routes->post("/{$prefijo}/store", "{$controlador}::store");
+        $routes->get("/{$prefijo}/edit/(:num)", "{$controlador}::edit/$1");
+        $routes->post("/{$prefijo}/update/(:num)", "{$controlador}::update/$1");
+        $routes->post("/{$prefijo}/delete/(:num)", "{$controlador}::delete/$1");
+    }
+
+    // Ahora registrar todas las rutas CRUD es una sola línea por entidad:
+    registrarCrud($routes, 'peliculas', 'Pelicula');
+    registrarCrud($routes, 'categorias', 'Categoria');
+    registrarCrud($routes, 'etiquetas', 'Etiqueta');
+
+    // Si añadimos una nueva entidad (ej: Producto):
+    registrarCrud($routes, 'productos', 'Producto');
+
+  COMPARACIÓN:
+    ANTES: 6 líneas × 3 entidades = 18 líneas de rutas
+    AHORA: 1 línea × 3 entidades = 3 líneas de rutas
+
+
+================================================================================
+  4.2 ALTERNATIVA: resource() DE CODEIGNITER
+================================================================================
+
+  CodeIgniter tiene un método integrado que hace algo similar:
+
+    $routes->resource('peliculas', ['controller' => 'Pelicula']);
+
+  Esto genera automáticamente:
+    GET    /peliculas           → Pelicula::index
+    GET    /peliculas/new       → Pelicula::new  (create)
+    GET    /peliculas/1         → Pelicula::show
+    GET    /peliculas/1/edit    → Pelicula::edit
+    POST   /peliculas           → Pelicula::create (store)
+    PUT    /peliculas/1         → Pelicula::update
+    DELETE /peliculas/1         → Pelicula::delete
+
+  La diferencia es que resource() usa convenciones REST (PUT, DELETE)
+  mientras que nuestra función usa POST para todo (más compatible con
+  formularios HTML que solo soportan GET y POST).
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: GENERAR VISTAS DINÁMICAS (OPCIONAL)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  5.1 COMANDO SPARK PERSONALIZADO PARA GENERAR CRUD
+================================================================================
+
+  El nivel máximo de automatización: un comando que genera TODO.
+
+  ARCHIVO: app/Commands/GenerarCrud.php
+  ─────────────────────────────────────
+
+    <?php
+    namespace App\Commands;
+
+    use CodeIgniter\CLI\BaseCommand;
+    use CodeIgniter\CLI\CLI;
+
+    class GenerarCrud extends BaseCommand
+    {
+        protected $group       = 'App';
+        protected $name        = 'crud:generar';
+        protected $description = 'Genera un CRUD completo (modelo, controlador, vistas, rutas)';
+        protected $usage       = 'crud:generar <NombreEntidad>';
+
+        public function run(array $params)
+        {
+            // Nombre de la entidad (ej: "Producto")
+            $nombre = $params[0] ?? CLI::prompt('Nombre de la entidad (ej: Producto)');
+
+            if (empty($nombre)) {
+                CLI::error('Debes especificar un nombre.');
+                return;
+            }
+
+            $singular    = $nombre;                           // "Producto"
+            $plural      = $nombre . 's';                     // "Productos"
+            $minuscula   = strtolower($nombre);               // "producto"
+            $minPlural   = strtolower($nombre) . 's';         // "productos"
+            $modelClass  = $nombre . 'Model';                 // "ProductoModel"
+
+            CLI::write("Generando CRUD para: {$nombre}", 'green');
+
+            // 1. Generar el controlador
+            $controladorContenido = $this->generarControlador(
+                $singular, $plural, $minuscula, $minPlural, $modelClass
+            );
+            $rutaControlador = APPPATH . 'Controllers/' . $singular . '.php';
+            file_put_contents($rutaControlador, $controladorContenido);
+            CLI::write("  Controlador creado: {$rutaControlador}", 'yellow');
+
+            // 2. Crear directorio de vistas
+            $dirVistas = APPPATH . 'Views/' . $minPlural;
+            if (!is_dir($dirVistas)) {
+                mkdir($dirVistas, 0755, true);
+            }
+
+            // 3. Generar vista index
+            $indexContenido = $this->generarVistaIndex($singular, $plural, $minPlural);
+            file_put_contents($dirVistas . '/index.php', $indexContenido);
+            CLI::write("  Vista index creada: {$dirVistas}/index.php", 'yellow');
+
+            // 4. Generar vista create
+            $createContenido = $this->generarVistaCreate($singular, $minPlural);
+            file_put_contents($dirVistas . '/create.php', $createContenido);
+            CLI::write("  Vista create creada: {$dirVistas}/create.php", 'yellow');
+
+            // 5. Generar vista edit
+            $editContenido = $this->generarVistaEdit($singular, $minuscula, $minPlural);
+            file_put_contents($dirVistas . '/edit.php', $editContenido);
+            CLI::write("  Vista edit creada: {$dirVistas}/edit.php", 'yellow');
+
+            CLI::newLine();
+            CLI::write("CRUD generado exitosamente.", 'green');
+            CLI::write("Recuerda:", 'white');
+            CLI::write("  1. Crear el modelo {$modelClass} con los campos necesarios", 'white');
+            CLI::write("  2. Crear la migración para la tabla {$minPlural}", 'white');
+            CLI::write("  3. Añadir la ruta en Routes.php:", 'white');
+            CLI::write("     registrarCrud(\$routes, '{$minPlural}', '{$singular}');", 'cyan');
+        }
+
+        private function generarControlador($singular, $plural, $min, $minP, $model): string
+        {
+            return "<?php\nnamespace App\Controllers;\n\n"
+                . "class {$singular} extends CrudController\n{\n"
+                . "    protected string \$modelClass     = 'App\\Models\\{$model}';\n"
+                . "    protected string \$vistasPrefijo  = '{$minP}';\n"
+                . "    protected string \$rutaBase       = '/{$minP}';\n"
+                . "    protected string \$tituloSingular = '{$singular}';\n"
+                . "    protected string \$tituloPlural   = '{$plural}';\n"
+                . "    protected string \$variableLista  = '{$minP}';\n"
+                . "    protected string \$variableItem   = '{$min}';\n"
+                . "    protected array  \$campos         = []; // RELLENAR CON TUS CAMPOS\n"
+                . "    protected int    \$porPagina      = 10;\n"
+                . "}\n";
+        }
+
+        private function generarVistaIndex($singular, $plural, $minP): string
+        {
+            return "<?= \$this->extend('layout/main') ?>\n"
+                . "<?= \$this->section('contenido') ?>\n\n"
+                . "<div class=\"d-flex justify-content-between align-items-center mb-3\">\n"
+                . "    <h1>{$plural}</h1>\n"
+                . "    <a href=\"<?= base_url('/{$minP}/create') ?>\" class=\"btn btn-primary\">\n"
+                . "        <i class=\"fa fa-plus\"></i> Nuevo/a {$singular}\n"
+                . "    </a>\n"
+                . "</div>\n\n"
+                . "<div class=\"table-responsive\">\n"
+                . "    <table class=\"table table-bordered table-striped table-hover\">\n"
+                . "        <thead class=\"table-dark\">\n"
+                . "            <tr>\n"
+                . "                <th>ID</th>\n"
+                . "                <th><!-- CAMPOS --></th>\n"
+                . "                <th>Acciones</th>\n"
+                . "            </tr>\n"
+                . "        </thead>\n"
+                . "        <tbody>\n"
+                . "            <?php if (!empty(\${$minP})): ?>\n"
+                . "                <?php foreach (\${$minP} as \$item): ?>\n"
+                . "                    <tr>\n"
+                . "                        <td><?= \$item['id'] ?></td>\n"
+                . "                        <td><!-- CAMPOS --></td>\n"
+                . "                        <td>\n"
+                . "                            <a href=\"<?= base_url('/{$minP}/edit/' . \$item['id']) ?>\" class=\"btn btn-sm btn-warning\">\n"
+                . "                                <i class=\"fa fa-edit\"></i>\n"
+                . "                            </a>\n"
+                . "                            <form action=\"<?= base_url('/{$minP}/delete/' . \$item['id']) ?>\" method=\"POST\" class=\"d-inline\" onsubmit=\"return confirm('¿Seguro?')\">\n"
+                . "                                <?= csrf_field() ?>\n"
+                . "                                <button class=\"btn btn-sm btn-danger\"><i class=\"fa fa-trash\"></i></button>\n"
+                . "                            </form>\n"
+                . "                        </td>\n"
+                . "                    </tr>\n"
+                . "                <?php endforeach; ?>\n"
+                . "            <?php else: ?>\n"
+                . "                <tr><td colspan=\"3\" class=\"text-center\">No hay registros</td></tr>\n"
+                . "            <?php endif; ?>\n"
+                . "        </tbody>\n"
+                . "    </table>\n"
+                . "</div>\n\n"
+                . "<?php if (isset(\$pager)): ?>\n"
+                . "    <div class=\"d-flex justify-content-center\">\n"
+                . "        <?= \$pager->links('default', 'default_full') ?>\n"
+                . "    </div>\n"
+                . "<?php endif; ?>\n\n"
+                . "<?= \$this->endSection() ?>\n";
+        }
+
+        private function generarVistaCreate($singular, $minP): string
+        {
+            return "<?= \$this->extend('layout/main') ?>\n"
+                . "<?= \$this->section('contenido') ?>\n\n"
+                . "<h1>Crear {$singular}</h1>\n\n"
+                . "<?php if (session()->getFlashdata('errors')): ?>\n"
+                . "    <div class=\"alert alert-danger\">\n"
+                . "        <ul>\n"
+                . "            <?php foreach (session()->getFlashdata('errors') as \$error): ?>\n"
+                . "                <li><?= esc(\$error) ?></li>\n"
+                . "            <?php endforeach; ?>\n"
+                . "        </ul>\n"
+                . "    </div>\n"
+                . "<?php endif; ?>\n\n"
+                . "<form action=\"<?= base_url('/{$minP}/store') ?>\" method=\"POST\">\n"
+                . "    <?= csrf_field() ?>\n\n"
+                . "    <!-- AÑADIR CAMPOS DEL FORMULARIO AQUÍ -->\n\n"
+                . "    <button type=\"submit\" class=\"btn btn-success\">\n"
+                . "        <i class=\"fa fa-save\"></i> Guardar\n"
+                . "    </button>\n"
+                . "    <a href=\"<?= base_url('/{$minP}') ?>\" class=\"btn btn-secondary\">Cancelar</a>\n"
+                . "</form>\n\n"
+                . "<?= \$this->endSection() ?>\n";
+        }
+
+        private function generarVistaEdit($singular, $min, $minP): string
+        {
+            return "<?= \$this->extend('layout/main') ?>\n"
+                . "<?= \$this->section('contenido') ?>\n\n"
+                . "<h1>Editar {$singular}</h1>\n\n"
+                . "<?php if (session()->getFlashdata('errors')): ?>\n"
+                . "    <div class=\"alert alert-danger\">\n"
+                . "        <ul>\n"
+                . "            <?php foreach (session()->getFlashdata('errors') as \$error): ?>\n"
+                . "                <li><?= esc(\$error) ?></li>\n"
+                . "            <?php endforeach; ?>\n"
+                . "        </ul>\n"
+                . "    </div>\n"
+                . "<?php endif; ?>\n\n"
+                . "<form action=\"<?= base_url('/{$minP}/update/' . \${$min}['id']) ?>\" method=\"POST\">\n"
+                . "    <?= csrf_field() ?>\n\n"
+                . "    <!-- AÑADIR CAMPOS DEL FORMULARIO AQUÍ -->\n\n"
+                . "    <button type=\"submit\" class=\"btn btn-success\">\n"
+                . "        <i class=\"fa fa-save\"></i> Actualizar\n"
+                . "    </button>\n"
+                . "    <a href=\"<?= base_url('/{$minP}') ?>\" class=\"btn btn-secondary\">Cancelar</a>\n"
+                . "</form>\n\n"
+                . "<?= \$this->endSection() ?>\n";
+        }
+    }
+
+  USO:
+    php spark crud:generar Producto
+
+  GENERA AUTOMÁTICAMENTE:
+    ✓ app/Controllers/Producto.php (extiende CrudController)
+    ✓ app/Views/productos/index.php (listado con tabla Bootstrap)
+    ✓ app/Views/productos/create.php (formulario de creación)
+    ✓ app/Views/productos/edit.php (formulario de edición)
+
+  TODAVÍA NECESITAS CREAR MANUALMENTE:
+    - El modelo (ProductoModel) con los campos y validaciones
+    - La migración para la tabla
+    - Añadir la ruta en Routes.php
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 6: FLUJO COMPLETO PARA AÑADIR UNA NUEVA ENTIDAD
+████████████████████████████████████████████████████████████████████████████████
+
+  Ejemplo: Queremos añadir un CRUD de "Productos" a la aplicación.
+
+  PASO 1: Generar el esqueleto (1 segundo):
+
+    php spark crud:generar Producto
+
+  PASO 2: Crear la migración:
+
+    php spark make:migration Productos
+
+  Y definimos los campos de la tabla.
+
+  PASO 3: Crear el modelo:
+
+    php spark make:model ProductoModel
+
+  Y definimos los campos, validaciones, etc.
+
+  PASO 4: Personalizar los campos del controlador:
+
+    protected array $campos = ['nombre', 'precio', 'descripcion', 'stock'];
+
+  PASO 5: Completar las vistas generadas (añadir los inputs de cada campo).
+
+  PASO 6: Añadir la ruta:
+
+    registrarCrud($routes, 'productos', 'Producto');
+
+  PASO 7: Ejecutar la migración:
+
+    php spark migrate
+
+  PASO 8: (Opcional) Crear un seeder para datos de prueba:
+
+    php spark make:seeder ProductoSeeder
+
+  ¡LISTO! CRUD completo de Productos en minutos.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 7: VENTAJAS DEL CRUD AUTOMATIZADO
+████████████████████████████████████████████████████████████████████████████████
+
+  ┌─────────────────────────┬──────────────────────────┬───────────────────────┐
+  │ Aspecto                 │ Sin automatizar          │ Con automatizar       │
+  ├─────────────────────────┼──────────────────────────┼───────────────────────┤
+  │ Crear un CRUD nuevo     │ 1-2 horas                │ 15-30 minutos         │
+  │ Código duplicado        │ Mucho (copiar/pegar)     │ Cero (herencia)       │
+  │ Corregir un bug         │ Cambiar en N archivos    │ Cambiar en 1 lugar    │
+  │ Añadir funcionalidad    │ Modificar cada CRUD      │ Modificar la base     │
+  │ Consistencia            │ Depende del desarrollador│ Garantizada           │
+  │ Curva de aprendizaje    │ Baja (código explícito)  │ Media (entender hooks)│
+  └─────────────────────────┴──────────────────────────┴───────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  RESUMEN
+████████████████████████████████████████████████████████████████████████████████
+
+  1. El CRUD automatizado elimina código repetitivo
+  2. Se basa en un controlador base abstracto (CrudController)
+  3. Los controladores hijos solo definen CONFIGURACIÓN (no lógica)
+  4. Los HOOKS permiten personalizar comportamiento sin duplicar código
+  5. Las rutas se pueden generar con una función auxiliar
+  6. Un comando Spark personalizado puede generar los archivos del esqueleto
+  7. El modelo y la migración siguen siendo manuales (cada entidad es diferente)
+  8. Este patrón se usa en frameworks profesionales como Laravel (Backpack, Nova)
+
+================================================================================

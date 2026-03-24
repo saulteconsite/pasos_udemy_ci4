@@ -11,6 +11,8 @@ use App\Models\CategoriaModel;
 use App\Models\EtiquetaModel;
 // IMPORTAMOS EL MODELO DE LA TABLA PIVOTE PELÍCULA-ETIQUETA
 use App\Models\PeliculaEtiquetaModel;
+// IMPORTAMOS LA LIBRERÍA PERSONALIZADA DE GENERACIÓN DE PDFs (SECCIÓN 23)
+use App\Libraries\PdfGenerator;
 
 // CONTROLADOR CRUD PARA GESTIONAR PELÍCULAS
 class Pelicula extends BaseController
@@ -265,4 +267,37 @@ class Pelicula extends BaseController
         // REDIRIGIMOS AL LISTADO CON UN MENSAJE DE ÉXITO
         return redirect()->to(base_url('/peliculas'))->with('mensaje', 'Película eliminada correctamente');
     }
+
+    // =============================================
+    // SECCIÓN 23: MÉTODO PDF - GENERA UN PDF CON LA FICHA DE UNA PELÍCULA
+    // RUTA: GET /peliculas/pdf/5
+    // =============================================
+    // USA LA LIBRERÍA PERSONALIZADA PdfGenerator REGISTRADA COMO SERVICIO
+    // EL PDF SE GENERA EN HTML Y SE ENVÍA AL NAVEGADOR PARA SU DESCARGA
+    public function pdf($id = null)
+    {
+        // BUSCAMOS LA PELÍCULA POR SU ID
+        $pelicula = $this->peliculaModel->find($id);
+
+        // SI NO EXISTE, LANZAMOS ERROR 404
+        if ($pelicula === null) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('No se encontró la película');
+        }
+
+        // OBTENEMOS LA INSTANCIA DE NUESTRA LIBRERÍA PDFGENERATOR MEDIANTE EL SERVICIO
+        // service('pdfGenerator') DEVUELVE LA INSTANCIA REGISTRADA EN Config/Services.php
+        $pdf = service('pdfGenerator');
+
+        // GENERAMOS EL HTML DEL PDF USANDO EL MÉTODO peliculaPdf() DE NUESTRA LIBRERÍA
+        $html = $pdf->peliculaPdf($pelicula);
+
+        // ENVIAMOS EL HTML COMO RESPUESTA AL NAVEGADOR
+        // EN UN PROYECTO REAL SE CONVERTIRÍA A PDF BINARIO CON DOMPDF
+        return $this->response
+            // ESTABLECEMOS EL TIPO DE CONTENIDO COMO HTML
+            ->setHeader('Content-Type', 'text/html; charset=UTF-8')
+            // ESTABLECEMOS EL CUERPO DE LA RESPUESTA CON EL HTML GENERADO
+            ->setBody($html);
+    }
+
 }

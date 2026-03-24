@@ -1,0 +1,703 @@
+================================================================================
+  SECCIÓN 19: REST API - RELACIONES Y MÉTODOS PERSONALIZADOS EN CODEIGNITER 4
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ VEREMOS EN ESTA SECCIÓN?
+████████████████████████████████████████████████████████████████████████████████
+
+  En la sección 12 ya creamos una Rest API CRUD básica (ApiPelicula y
+  ApiCategoria). Ahora vamos un paso más allá: añadimos RELACIONES entre
+  entidades dentro de la API, creamos métodos personalizados como upload de
+  archivos, paginación de resultados y búsquedas/filtros desde la API.
+
+  En resumen, esta sección transforma nuestra API básica en una API COMPLETA
+  y lista para ser consumida por un frontend real (Vue, React, móvil, etc.).
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: RELACIONES EN LA REST API
+████████████████████████████████████████████████████████████████████████████████
+
+  Nuestra base de datos tiene estas relaciones:
+
+  ┌─────────────┐     1:N     ┌──────────────┐     N:M     ┌─────────────┐
+  │  categorias  │◄───────────│  peliculas    │────────────►│  etiquetas  │
+  │  - id        │            │  - id         │             │  - id       │
+  │  - titulo    │            │  - titulo     │             │  - nombre   │
+  └─────────────┘            │  - categoria_id│             └─────────────┘
+                              │  - imagen     │                    │
+                              └───────────────┘                    │
+                                      │           ┌────────────────────────┐
+                                      └──────────►│  pelicula_etiqueta     │
+                                                  │  - pelicula_id         │
+                                                  │  - etiqueta_id         │
+                                                  └────────────────────────┘
+
+  RELACIÓN 1:N (Uno a Muchos): Una CATEGORÍA tiene MUCHAS películas.
+  RELACIÓN N:M (Muchos a Muchos): Una PELÍCULA tiene MUCHAS etiquetas
+                                  y una ETIQUETA pertenece a MUCHAS películas.
+
+
+================================================================================
+  1.1 TRAER RELACIONES EN EL MÉTODO INDEX (LISTADO)
+================================================================================
+
+  En nuestro ApiPelicula::index() ya usamos un JOIN para traer el nombre de
+  la categoría junto con cada película:
+
+  ARCHIVO: app/Controllers/ApiPelicula.php
+  ─────────────────────────────────────────
+
+    public function index()
+    {
+        // getPeliculasConCategoria() hace un LEFT JOIN con la tabla categorias
+        // Así cada película viene con el campo 'categoria_nombre'
+        $peliculas = $this->model->getPeliculasConCategoria();
+
+        return $this->respond([
+            'status'  => 200,
+            'mensaje' => 'LISTADO DE PELÍCULAS',
+            'datos'   => $peliculas,
+        ]);
+    }
+
+  ¿QUÉ HACE getPeliculasConCategoria() EN EL MODELO?
+
+  ARCHIVO: app/Models/PeliculaModel.php
+  ─────────────────────────────────────
+
+    public function getPeliculasConCategoria()
+    {
+        return $this->select('peliculas.*, categorias.titulo AS categoria_nombre')
+                     ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left')
+                     ->orderBy('peliculas.id', 'DESC')
+                     ->findAll();
+    }
+
+  DESGLOSE:
+    - select('peliculas.*, categorias.titulo AS categoria_nombre')
+        → Trae TODOS los campos de peliculas + el título de la categoría
+          renombrado como 'categoria_nombre'.
+
+    - join('categorias', 'categorias.id = peliculas.categoria_id', 'left')
+        → LEFT JOIN: Incluye películas SIN categoría (categoria_nombre = null).
+        → Si usáramos 'inner' en vez de 'left', las películas sin categoría
+          NO aparecerían en el resultado.
+
+    - orderBy('peliculas.id', 'DESC')
+        → Ordena de más reciente a más antiguo.
+
+  EJEMPLO DE RESPUESTA JSON:
+  ─────────────────────────
+    {
+        "status": 200,
+        "mensaje": "LISTADO DE PELÍCULAS",
+        "datos": [
+            {
+                "id": 5,
+                "titulo": "Coco",
+                "descripcion": "Un niño mexicano...",
+                "categoria_id": 2,
+                "categoria_nombre": "Animación",    ← VIENE DEL JOIN
+                "imagen": "1710234567_abc123.jpg",
+                "created_at": "2026-03-16 12:00:00"
+            },
+            {
+                "id": 4,
+                "titulo": "Matrix",
+                "descripcion": "Un programador descubre...",
+                "categoria_id": null,
+                "categoria_nombre": null,            ← NO TIENE CATEGORÍA
+                "imagen": null,
+                "created_at": "2026-03-16 11:00:00"
+            }
+        ]
+    }
+
+
+================================================================================
+  1.2 TRAER RELACIONES N:M EN EL MÉTODO SHOW (DETALLE)
+================================================================================
+
+  Cuando consultamos UNA película por su ID, además de los datos básicos
+  queremos las ETIQUETAS asignadas (relación muchos a muchos).
+
+  ARCHIVO: app/Controllers/ApiPelicula.php
+  ─────────────────────────────────────────
+
+    public function show($id = null)
+    {
+        // 1. Buscamos la película por ID
+        $pelicula = $this->model->find($id);
+
+        if ($pelicula === null) {
+            return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
+        }
+
+        // 2. Consultamos la tabla pivote para obtener los IDs de etiquetas
+        $pivote = new \App\Models\PeliculaEtiquetaModel();
+        $etiquetaIds = $pivote->getEtiquetasDePelicula($id);
+
+        // 3. Si hay IDs, consultamos la tabla etiquetas para obtener los datos completos
+        $etiquetas = [];
+        if (!empty($etiquetaIds)) {
+            $etiquetaModel = new \App\Models\EtiquetaModel();
+            $etiquetas = $etiquetaModel->whereIn('id', $etiquetaIds)->findAll();
+        }
+
+        // 4. Añadimos las etiquetas al array de la película
+        $pelicula['etiquetas'] = $etiquetas;
+
+        return $this->respond([
+            'status'  => 200,
+            'mensaje' => 'PELÍCULA ENCONTRADA',
+            'datos'   => $pelicula,
+        ]);
+    }
+
+  FLUJO PASO A PASO:
+  ──────────────────
+
+  PASO 1: find(5) → Busca en la tabla 'peliculas' WHERE id = 5
+          Resultado: ['id'=>5, 'titulo'=>'Coco', 'categoria_id'=>2, ...]
+
+  PASO 2: getEtiquetasDePelicula(5) → Busca en 'pelicula_etiqueta'
+          WHERE pelicula_id = 5
+          Resultado: [1, 3, 7] (array plano de IDs de etiquetas)
+
+  PASO 3: whereIn('id', [1, 3, 7]) → Busca en 'etiquetas'
+          WHERE id IN (1, 3, 7)
+          Resultado: [
+              ['id'=>1, 'nombre'=>'Clásico'],
+              ['id'=>3, 'nombre'=>'Ciencia Ficción'],
+              ['id'=>7, 'nombre'=>'Aventura']
+          ]
+
+  PASO 4: Unimos todo en un solo array
+
+  EJEMPLO DE RESPUESTA JSON PARA GET /api/peliculas/5:
+  ────────────────────────────────────────────────────
+    {
+        "status": 200,
+        "mensaje": "PELÍCULA ENCONTRADA",
+        "datos": {
+            "id": 5,
+            "titulo": "Coco",
+            "descripcion": "Un niño mexicano...",
+            "categoria_id": 2,
+            "imagen": "1710234567_abc123.jpg",
+            "etiquetas": [                       ← RELACIÓN N:M
+                {"id": 1, "nombre": "Clásico"},
+                {"id": 3, "nombre": "Ciencia Ficción"},
+                {"id": 7, "nombre": "Aventura"}
+            ]
+        }
+    }
+
+
+================================================================================
+  1.3 EL MÉTODO whereIn() EXPLICADO
+================================================================================
+
+  whereIn() es un método del Query Builder de CodeIgniter que genera una
+  cláusula SQL IN:
+
+    $etiquetaModel->whereIn('id', [1, 3, 7])->findAll();
+
+  Genera esta SQL:
+
+    SELECT * FROM etiquetas WHERE id IN (1, 3, 7)
+
+  Es mucho más eficiente que hacer 3 consultas individuales:
+
+    ✗ INEFICIENTE (3 consultas):
+      $etiquetaModel->find(1);
+      $etiquetaModel->find(3);
+      $etiquetaModel->find(7);
+
+    ✓ EFICIENTE (1 sola consulta):
+      $etiquetaModel->whereIn('id', [1, 3, 7])->findAll();
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: MÉTODOS PERSONALIZADOS EN LA REST API
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 MÉTODO UPLOAD: SUBIDA DE IMÁGENES POR API
+================================================================================
+
+  Cuando creamos una película desde la web, el formulario HTML sube la imagen
+  directamente. Pero desde la API necesitamos un endpoint específico para
+  subir imágenes.
+
+  CÓMO IMPLEMENTAR UN ENDPOINT DE UPLOAD:
+
+  ARCHIVO: app/Controllers/ApiPelicula.php (AÑADIR)
+  ──────────────────────────────────────────────────
+
+    // MÉTODO UPLOAD: SUBIR IMAGEN A UNA PELÍCULA YA EXISTENTE
+    // RUTA: POST /api/peliculas/upload/5
+    public function upload($id = null)
+    {
+        // 1. Verificamos que la película existe
+        $pelicula = $this->model->find($id);
+        if ($pelicula === null) {
+            return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
+        }
+
+        // 2. Obtenemos el archivo subido (campo 'imagen' del form-data)
+        $imagen = $this->request->getFile('imagen');
+
+        // 3. Verificamos que se haya enviado una imagen válida
+        if (!$imagen || !$imagen->isValid() || $imagen->hasMoved()) {
+            return $this->fail('NO SE RECIBIÓ UNA IMAGEN VÁLIDA.', 400);
+        }
+
+        // 4. Validamos tipo y tamaño
+        $reglas = [
+            'imagen' => 'uploaded[imagen]|max_size[imagen,2048]|is_image[imagen]'
+                      . '|mime_in[imagen,image/jpg,image/jpeg,image/png,image/gif]',
+        ];
+
+        if (!$this->validate($reglas)) {
+            return $this->failValidationErrors($this->validator->getErrors());
+        }
+
+        // 5. Si ya tenía imagen, eliminamos la anterior
+        if (!empty($pelicula['imagen'])) {
+            $rutaAnterior = FCPATH . 'uploads/peliculas/' . $pelicula['imagen'];
+            if (file_exists($rutaAnterior)) {
+                unlink($rutaAnterior);
+            }
+        }
+
+        // 6. Generamos nombre aleatorio y movemos
+        $nuevoNombre = $imagen->getRandomName();
+        $imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
+
+        // 7. Actualizamos el campo imagen en la base de datos
+        $this->model->update($id, ['imagen' => $nuevoNombre]);
+
+        // 8. Devolvemos respuesta de éxito
+        return $this->respond([
+            'status'  => 200,
+            'mensaje' => 'IMAGEN SUBIDA CORRECTAMENTE',
+            'imagen'  => $nuevoNombre,
+            'url'     => base_url('uploads/peliculas/' . $nuevoNombre),
+        ]);
+    }
+
+  RUTA QUE DEBEMOS AGREGAR EN app/Config/Routes.php:
+  ──────────────────────────────────────────────────
+
+    // Dentro del grupo 'api'
+    $routes->post('peliculas/upload/(:num)', 'ApiPelicula::upload/$1');
+
+  CÓMO PROBAR EN POSTMAN:
+  ──────────────────────
+    - Método: POST
+    - URL: http://tu-sitio.ddev.site/api/peliculas/upload/5
+    - Body → form-data:
+        Key: imagen (tipo File)
+        Value: (seleccionar archivo .jpg o .png)
+
+  MÉTODOS CLAVE DEL OBJETO $imagen (UploadedFile):
+  ────────────────────────────────────────────────
+    $imagen->isValid()        → TRUE si el archivo se subió sin errores
+    $imagen->hasMoved()       → TRUE si ya fue movido (evita mover 2 veces)
+    $imagen->getRandomName()  → Genera nombre único: "1710234567_abc123.jpg"
+    $imagen->move($ruta, $nombre) → Mueve el archivo a la ruta especificada
+    $imagen->getName()        → Nombre original del archivo
+    $imagen->getSize()        → Tamaño en bytes
+    $imagen->getMimeType()    → "image/jpeg", "image/png", etc.
+    $imagen->getExtension()   → "jpg", "png", "gif"
+
+
+================================================================================
+  2.2 MÉTODO PAGINACIÓN: RESULTADOS PAGINADOS POR API
+================================================================================
+
+  En la web ya tenemos paginación con paginate(). Para la API necesitamos
+  devolver los datos paginados + metadatos de paginación en JSON.
+
+  CÓMO IMPLEMENTAR PAGINACIÓN EN LA API:
+
+  ARCHIVO: app/Controllers/ApiPelicula.php (AÑADIR O MODIFICAR INDEX)
+  ────────────────────────────────────────────────────────────────────
+
+    // MÉTODO INDEX CON PAGINACIÓN
+    // RUTA: GET /api/peliculas?page=2&porPagina=10
+    public function index()
+    {
+        // Leemos los parámetros de la URL
+        $page      = (int) ($this->request->getGet('page') ?? 1);
+        $porPagina = (int) ($this->request->getGet('porPagina') ?? 10);
+
+        // Usamos el método del modelo con JOIN de categoría
+        $peliculas = $this->model
+            ->select('peliculas.*, categorias.titulo AS categoria_nombre')
+            ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left')
+            ->orderBy('peliculas.id', 'DESC')
+            ->paginate($porPagina);
+
+        // Obtenemos el pager para los metadatos
+        $pager = $this->model->pager;
+
+        return $this->respond([
+            'status'  => 200,
+            'mensaje' => 'LISTADO DE PELÍCULAS',
+            'datos'   => $peliculas,
+            'paginacion' => [
+                'pagina_actual'  => $pager->getCurrentPage(),
+                'por_pagina'     => $porPagina,
+                'total_paginas'  => $pager->getPageCount(),
+                'total_registros'=> $pager->getTotal(),
+                'tiene_anterior' => $pager->hasPrevious(),
+                'tiene_siguiente'=> $pager->hasNext(),
+            ],
+        ]);
+    }
+
+  EJEMPLO DE RESPUESTA JSON PARA GET /api/peliculas?page=2&porPagina=5:
+  ─────────────────────────────────────────────────────────────────────
+    {
+        "status": 200,
+        "mensaje": "LISTADO DE PELÍCULAS",
+        "datos": [
+            {"id": 5, "titulo": "Coco", ...},
+            {"id": 4, "titulo": "Matrix", ...},
+            ...
+        ],
+        "paginacion": {
+            "pagina_actual": 2,
+            "por_pagina": 5,
+            "total_paginas": 4,
+            "total_registros": 20,
+            "tiene_anterior": true,
+            "tiene_siguiente": true
+        }
+    }
+
+  MÉTODOS DEL PAGER:
+  ─────────────────
+    $pager->getCurrentPage()  → Número de página actual (1, 2, 3...)
+    $pager->getPageCount()    → Total de páginas disponibles
+    $pager->getTotal()        → Total de registros en la BD
+    $pager->hasPrevious()     → ¿Hay página anterior? (true/false)
+    $pager->hasNext()         → ¿Hay página siguiente? (true/false)
+
+
+================================================================================
+  2.3 MÉTODO BÚSQUEDA/FILTROS EN LA API
+================================================================================
+
+  Igual que en la web filtramos películas, la API puede recibir filtros
+  por query string.
+
+  IMPLEMENTACIÓN:
+  ──────────────
+
+    // GET /api/peliculas?busqueda=matrix&categoria_id=5
+    public function index()
+    {
+        $filtros = [
+            'busqueda'     => $this->request->getGet('busqueda'),
+            'categoria_id' => $this->request->getGet('categoria_id'),
+            'etiqueta_id'  => $this->request->getGet('etiqueta_id'),
+        ];
+
+        $porPagina = (int) ($this->request->getGet('porPagina') ?? 10);
+
+        // Reutilizamos el mismo método del modelo que usa la web
+        $peliculas = $this->model->getPeliculasFiltradas($filtros, $porPagina);
+        $pager = $this->model->pager;
+
+        return $this->respond([
+            'status'     => 200,
+            'mensaje'    => 'LISTADO DE PELÍCULAS',
+            'datos'      => $peliculas,
+            'filtros'    => $filtros,
+            'paginacion' => [
+                'pagina_actual'   => $pager->getCurrentPage(),
+                'total_paginas'   => $pager->getPageCount(),
+                'total_registros' => $pager->getTotal(),
+            ],
+        ]);
+    }
+
+  VENTAJA: Reutilizamos getPeliculasFiltradas() del modelo, que ya tiene
+  toda la lógica de filtros (LIKE agrupado, filtro por categoría, filtro por
+  etiqueta con JOIN a la tabla pivote). El modelo sirve tanto para la web
+  como para la API.
+
+
+================================================================================
+  2.4 MÉTODO PARA GESTIONAR ETIQUETAS DE UNA PELÍCULA VÍA API
+================================================================================
+
+  Necesitamos endpoints para asignar y consultar las etiquetas de una película.
+
+  EJEMPLO DE ENDPOINT PARA ASIGNAR ETIQUETAS:
+
+    // POST /api/peliculas/5/etiquetas
+    // Body JSON: {"etiquetas": [1, 3, 7]}
+    public function asignarEtiquetas($id = null)
+    {
+        $pelicula = $this->model->find($id);
+        if ($pelicula === null) {
+            return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA');
+        }
+
+        // Obtenemos el array de IDs de etiquetas del body JSON
+        $etiquetaIds = $this->request->getJSON(true)['etiquetas'] ?? [];
+
+        // Usamos el método sincronizar() del modelo pivote
+        $pivote = new \App\Models\PeliculaEtiquetaModel();
+        $pivote->sincronizar($id, $etiquetaIds);
+
+        return $this->respond([
+            'status'  => 200,
+            'mensaje' => 'ETIQUETAS ASIGNADAS CORRECTAMENTE',
+            'etiquetas_asignadas' => $etiquetaIds,
+        ]);
+    }
+
+  RUTA:
+    $routes->post('peliculas/(:num)/etiquetas', 'ApiPelicula::asignarEtiquetas/$1');
+
+  EL MÉTODO sincronizar() DEL MODELO PIVOTE:
+  ──────────────────────────────────────────
+
+    public function sincronizar($peliculaId, array $etiquetaIds)
+    {
+        // 1. BORRA todas las etiquetas anteriores de esa película
+        $this->where('pelicula_id', $peliculaId)->delete();
+
+        // 2. INSERTA las nuevas etiquetas una por una
+        foreach ($etiquetaIds as $etiquetaId) {
+            $this->insert([
+                'pelicula_id' => $peliculaId,
+                'etiqueta_id' => $etiquetaId,
+            ]);
+        }
+    }
+
+  Este patrón "borrar todo + insertar nuevo" se llama SYNC (sincronización)
+  y es el más simple de implementar. La alternativa sería comparar qué
+  etiquetas hay que añadir y cuáles quitar, pero requiere más código.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: MÉTODOS DE RESPUESTA DEL ResourceController
+████████████████████████████████████████████████████████████████████████████████
+
+  ResourceController hereda de BaseController y añade métodos para enviar
+  respuestas HTTP con los códigos de estado correctos:
+
+  ┌────────────────────────────────┬──────────┬──────────────────────────────┐
+  │ Método                         │ Código   │ ¿Cuándo usarlo?              │
+  ├────────────────────────────────┼──────────┼──────────────────────────────┤
+  │ $this->respond($datos)         │ 200 OK   │ Consulta exitosa             │
+  │ $this->respondCreated($datos)  │ 201      │ Recurso creado               │
+  │ $this->respondDeleted($datos)  │ 200      │ Recurso eliminado            │
+  │ $this->respondUpdated($datos)  │ 200      │ Recurso actualizado          │
+  │ $this->respondNoContent()      │ 204      │ Éxito sin contenido          │
+  │ $this->fail($mensaje, $codigo) │ 400-499  │ Error del cliente            │
+  │ $this->failNotFound($mensaje)  │ 404      │ Recurso no encontrado        │
+  │ $this->failValidationErrors()  │ 400      │ Datos inválidos              │
+  │ $this->failUnauthorized()      │ 401      │ No autenticado               │
+  │ $this->failForbidden()         │ 403      │ Sin permisos                 │
+  │ $this->failServerError()       │ 500      │ Error interno del servidor   │
+  └────────────────────────────────┴──────────┴──────────────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: LECTURA DE DATOS JSON EN EL REQUEST
+████████████████████████████████████████████████████████████████████████████████
+
+  Cuando un frontend envía datos, puede usar 3 formatos:
+
+  1. FORM-DATA (multipart/form-data):
+     → Se usa cuando se suben archivos.
+     → Se lee con: $this->request->getVar('campo')
+                    $this->request->getFile('archivo')
+
+  2. FORM URL-ENCODED (application/x-www-form-urlencoded):
+     → Formato estándar de formularios HTML.
+     → Se lee con: $this->request->getVar('campo')
+                    $this->request->getPost('campo')
+
+  3. JSON (application/json):
+     → Formato más usado en APIs modernas.
+     → Se lee con: $this->request->getJSON()      → Devuelve objeto
+                    $this->request->getJSON(true)   → Devuelve array asociativo
+
+  EJEMPLO CON JSON:
+  ────────────────
+
+    // El frontend envía:
+    // POST /api/peliculas
+    // Content-Type: application/json
+    // Body: {"titulo": "Inception", "descripcion": "Los sueños...", "categoria_id": 3}
+
+    public function create()
+    {
+        // Opción A: getVar() funciona con form-data Y JSON
+        $titulo = $this->request->getVar('titulo');
+
+        // Opción B: getJSON() específico para JSON
+        $json = $this->request->getJSON(true); // true = array asociativo
+        $titulo = $json['titulo'];
+
+        // getVar() es más versátil porque funciona con ambos formatos.
+        // Por eso en el proyecto usamos getVar().
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: PROTEGER LA API CON FILTROS
+████████████████████████████████████████████████████████████████████████████████
+
+  Actualmente las rutas /api/* son públicas. Para protegerlas podemos:
+
+  OPCIÓN A: Aplicar el filtro auth a las rutas de la API
+  ──────────────────────────────────────────────────────
+
+  ARCHIVO: app/Config/Filters.php (MODIFICAR)
+  ────────────────────────────────────────────
+
+    public array $filters = [
+        'auth' => ['before' => [
+            'peliculas', 'peliculas/*',
+            'categorias', 'categorias/*',
+            'etiquetas', 'etiquetas/*',
+            'api/*',                         ← AÑADIR ESTO
+        ]],
+    ];
+
+  PROBLEMA: El filtro auth redirige al login, lo cual no tiene sentido
+  para una API (una API no tiene páginas HTML). La API debería devolver
+  un error 401 en JSON.
+
+  OPCIÓN B: Crear un filtro específico para la API (RECOMENDADO)
+  ──────────────────────────────────────────────────────────────
+
+  ARCHIVO: app/Filters/ApiAuthFilter.php (NUEVO)
+  ───────────────────────────────────────────────
+
+    <?php
+    namespace App\Filters;
+
+    use CodeIgniter\Filters\FilterInterface;
+    use CodeIgniter\HTTP\RequestInterface;
+    use CodeIgniter\HTTP\ResponseInterface;
+
+    class ApiAuthFilter implements FilterInterface
+    {
+        public function before(RequestInterface $request, $arguments = null)
+        {
+            // Leemos el token del header Authorization
+            $token = $request->getHeaderLine('Authorization');
+
+            // Si no hay token, devolvemos 401 en JSON
+            if (empty($token)) {
+                return service('response')
+                    ->setJSON([
+                        'status'  => 401,
+                        'mensaje' => 'TOKEN DE AUTENTICACIÓN REQUERIDO',
+                    ])
+                    ->setStatusCode(401);
+            }
+
+            // Aquí verificaríamos que el token sea válido
+            // (buscar en BD, verificar JWT, etc.)
+        }
+
+        public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
+        {
+        }
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 6: ELIMINAR EN CASCADA DESDE LA API
+████████████████████████████████████████████████████████████████████████████████
+
+  Cuando eliminamos una película por API, debemos eliminar:
+  1. Las etiquetas asociadas en la tabla pivote
+  2. La imagen del servidor (si tiene)
+  3. La película en sí
+
+  ASÍ LO TENEMOS EN EL PROYECTO:
+
+    public function delete($id = null)
+    {
+        $pelicula = $this->model->find($id);
+
+        if ($pelicula === null) {
+            return $this->failNotFound('NO SE ENCONTRÓ LA PELÍCULA CON ID ' . $id);
+        }
+
+        // 1. ELIMINAR IMAGEN DEL SERVIDOR
+        if (!empty($pelicula['imagen']) && file_exists(FCPATH . 'uploads/peliculas/' . $pelicula['imagen'])) {
+            unlink(FCPATH . 'uploads/peliculas/' . $pelicula['imagen']);
+        }
+
+        // 2. ELIMINAR REGISTROS DE LA TABLA PIVOTE
+        $pivote = new \App\Models\PeliculaEtiquetaModel();
+        $pivote->where('pelicula_id', $id)->delete();
+
+        // 3. ELIMINAR LA PELÍCULA
+        $this->model->delete($id);
+
+        return $this->respondDeleted([
+            'status'  => 200,
+            'mensaje' => 'PELÍCULA ELIMINADA CORRECTAMENTE',
+        ]);
+    }
+
+  ORDEN IMPORTANTE: Siempre hay que eliminar PRIMERO las dependencias
+  (pivote, archivos) y DESPUÉS el registro principal. Si lo hacemos al
+  revés, perderíamos la referencia al ID y no podríamos limpiar.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  RESUMEN DE ENDPOINTS COMPLETOS
+████████████████████████████████████████████████████████████████████████████████
+
+  ┌──────────┬──────────────────────────────────┬───────────────────────────────┐
+  │ Método   │ Ruta                             │ Descripción                   │
+  ├──────────┼──────────────────────────────────┼───────────────────────────────┤
+  │ GET      │ /api/peliculas                   │ Listar (con paginación)       │
+  │ GET      │ /api/peliculas?busqueda=matrix   │ Buscar/filtrar                │
+  │ GET      │ /api/peliculas/5                 │ Detalle (con etiquetas)       │
+  │ POST     │ /api/peliculas                   │ Crear película                │
+  │ PUT      │ /api/peliculas/5                 │ Actualizar película           │
+  │ DELETE   │ /api/peliculas/5                 │ Eliminar (cascada)            │
+  │ POST     │ /api/peliculas/upload/5          │ Subir imagen                  │
+  │ POST     │ /api/peliculas/5/etiquetas       │ Asignar etiquetas             │
+  ├──────────┼──────────────────────────────────┼───────────────────────────────┤
+  │ GET      │ /api/categorias                  │ Listar categorías             │
+  │ GET      │ /api/categorias/5                │ Detalle categoría             │
+  │ POST     │ /api/categorias                  │ Crear categoría               │
+  │ PUT      │ /api/categorias/5                │ Actualizar categoría          │
+  │ DELETE   │ /api/categorias/5                │ Eliminar categoría            │
+  └──────────┴──────────────────────────────────┴───────────────────────────────┘
+
+
+================================================================================
+  PARA PROBAR EN POSTMAN/INSOMNIA:
+================================================================================
+
+  1. Descarga Postman: https://www.postman.com/downloads/
+  2. Crea una nueva colección "CI4 Udemy API"
+  3. Añade requests para cada endpoint
+  4. Para POST/PUT envía los datos como form-data o JSON
+  5. Para upload usa form-data con tipo "File" en el campo imagen
+  6. Verifica los códigos de estado: 200, 201, 400, 404
+
+================================================================================

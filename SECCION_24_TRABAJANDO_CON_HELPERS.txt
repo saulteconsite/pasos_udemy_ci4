@@ -1,0 +1,559 @@
+================================================================================
+  SECCIÓN 24: TRABAJANDO CON HELPERS EN CODEIGNITER 4
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ ES UN HELPER?
+████████████████████████████████████████████████████████████████████████████████
+
+  Un HELPER es un archivo PHP que contiene FUNCIONES sueltas (no una clase).
+  Son funciones utilitarias que puedes llamar desde cualquier parte:
+  controladores, vistas, modelos, librerías, etc.
+
+  DIFERENCIA ENTRE LIBRERÍA Y HELPER:
+
+  ┌─────────────────────┬──────────────────────┬──────────────────────┐
+  │ Característica       │ Librería             │ Helper               │
+  ├─────────────────────┼──────────────────────┼──────────────────────┤
+  │ Estructura           │ Clase con métodos    │ Funciones sueltas    │
+  │ Estado               │ Tiene propiedades    │ Sin estado (stateless)│
+  │ Acceso               │ $objeto->metodo()    │ funcion()            │
+  │ Ejemplo              │ $email->send()       │ base_url('/ruta')    │
+  │ Ubicación            │ app/Libraries/       │ app/Helpers/         │
+  │ Carga                │ new / service()      │ helper('nombre')     │
+  └─────────────────────┴──────────────────────┴──────────────────────┘
+
+  REGLA DE ORO:
+    - Si la funcionalidad necesita estado (propiedades), usa LIBRERÍA.
+    - Si es una función simple y reutilizable, usa HELPER.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: HELPERS QUE YA USAMOS EN EL PROYECTO
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  1.1 HELPER URL
+================================================================================
+
+  CARGA: helper('url') o se carga automáticamente en muchos casos.
+
+  FUNCIONES QUE YA USAMOS EN LAS VISTAS:
+
+    base_url('/peliculas')
+    → Genera la URL completa: "https://udemy.ddev.site/peliculas"
+    → Usamos en TODOS los enlaces y formularios del proyecto.
+
+    base_url('uploads/peliculas/' . $pelicula['imagen'])
+    → Genera la URL de la imagen: "https://udemy.ddev.site/uploads/peliculas/abc.jpg"
+
+    site_url('/peliculas')
+    → Similar a base_url pero incluye el index.php si está configurado.
+    → En nuestro proyecto usamos base_url() que es más limpio.
+
+    current_url()
+    → Devuelve la URL actual completa.
+
+    previous_url()
+    → Devuelve la URL anterior (de donde venía el usuario).
+
+    uri_string()
+    → Devuelve solo la parte de la URI sin el dominio.
+    → Ejemplo: si la URL es "https://udemy.ddev.site/peliculas/edit/5"
+      → uri_string() devuelve "peliculas/edit/5"
+
+    redirect()->to(base_url('/peliculas'))
+    → Redirige al usuario a otra URL.
+    → to() acepta URL completa, back() vuelve a la anterior.
+
+  EJEMPLO EN NUESTRO PROYECTO (app/Views/layout/main.php):
+
+    <a class="navbar-brand" href="<?= base_url('/') ?>">CI4 Udemy</a>
+    <a class="nav-link" href="<?= base_url('/peliculas') ?>">Películas</a>
+
+
+================================================================================
+  1.2 HELPER FORM
+================================================================================
+
+  CARGA: helper('form')
+  DÓNDE LO CARGAMOS: app/Controllers/Auth.php → helper(['form', 'url'])
+
+  FUNCIONES PRINCIPALES:
+
+    form_open('/peliculas/store')
+    → Genera: <form action="https://udemy.ddev.site/peliculas/store" method="POST">
+    → También incluye automáticamente el campo CSRF si está habilitado.
+
+    form_open_multipart('/peliculas/store')
+    → Igual que form_open pero añade enctype="multipart/form-data"
+    → NECESARIO cuando el formulario sube archivos.
+
+    form_close()
+    → Genera: </form>
+
+    form_input('titulo', $valor)
+    → Genera: <input type="text" name="titulo" value="...">
+
+    form_textarea('descripcion', $valor)
+    → Genera: <textarea name="descripcion">...</textarea>
+
+    form_dropdown('categoria_id', $opciones, $seleccionado)
+    → Genera un <select> con las opciones.
+
+    form_label('Título', 'titulo')
+    → Genera: <label for="titulo">Título</label>
+
+    form_submit('enviar', 'Guardar')
+    → Genera: <input type="submit" name="enviar" value="Guardar">
+
+    csrf_field()
+    → Genera el campo oculto con el token CSRF.
+    → YA LO USAMOS en los formularios de eliminar:
+      <form action="..." method="POST">
+          <?= csrf_field() ?>
+          <button>Eliminar</button>
+      </form>
+
+    set_value('titulo')
+    → Devuelve el valor anterior del campo (para repoblar tras error).
+    → Útil con redirect()->back()->withInput()
+
+  NOTA: En nuestro proyecto NO usamos form_open() ni form_input() porque
+  preferimos escribir el HTML directamente con clases de Bootstrap.
+  Pero csrf_field() sí lo usamos en todos los formularios POST.
+
+
+================================================================================
+  1.3 HELPER TEXT
+================================================================================
+
+  CARGA: helper('text')
+  DÓNDE LO CARGAMOS: app/Controllers/Pelicula.php → helper('text')
+
+  FUNCIONES PRINCIPALES:
+
+    character_limiter($texto, 60)
+    → Recorta el texto a ~60 caracteres y añade "..." al final.
+    → CORTA EN PALABRAS COMPLETAS (no corta a mitad de palabra).
+    → YA LO USAMOS en la tabla de películas:
+
+      <td><?= character_limiter(esc($pelicula['descripcion'] ?? ''), 60) ?></td>
+
+      Entrada: "Un niño mexicano apasionado por la música viaja al mundo de los muertos"
+      Salida:  "Un niño mexicano apasionado por la música viaja al..."
+
+    word_limiter($texto, 10)
+    → Recorta a 10 PALABRAS (en vez de caracteres).
+
+    word_censor($texto, ['mala', 'palabras'], '***')
+    → Reemplaza palabras prohibidas por '***'.
+
+    highlight_phrase($texto, 'busqueda')
+    → Envuelve la coincidencia con <mark>: "El <mark>busqueda</mark> de..."
+
+    ascii_to_entities($texto)
+    → Convierte caracteres especiales a entidades HTML.
+
+    convert_accented_characters($texto)
+    → Convierte acentos: "ñ" → "n", "á" → "a"
+    → Útil para generar slugs de URL.
+
+    excerpt($texto, 'palabra', 20)
+    → Extrae un fragmento alrededor de 'palabra' con 20 caracteres de contexto.
+
+
+================================================================================
+  1.4 HELPER HTML
+================================================================================
+
+  CARGA: helper('html')
+
+    img('uploads/peliculas/abc.jpg')
+    → Genera: <img src="https://udemy.ddev.site/uploads/peliculas/abc.jpg">
+
+    img(['src' => 'foto.jpg', 'class' => 'img-thumbnail', 'alt' => 'Foto'])
+    → Genera: <img src="foto.jpg" class="img-thumbnail" alt="Foto">
+
+    link_tag('css/estilos.css')
+    → Genera: <link rel="stylesheet" href="https://udemy.ddev.site/css/estilos.css">
+
+    script_tag('js/app.js')
+    → Genera: <script src="https://udemy.ddev.site/js/app.js"></script>
+
+    ul(['Elemento 1', 'Elemento 2', 'Elemento 3'])
+    → Genera: <ul><li>Elemento 1</li><li>Elemento 2</li>...</ul>
+
+    ol(['Paso 1', 'Paso 2', 'Paso 3'])
+    → Genera: <ol><li>Paso 1</li><li>Paso 2</li>...</ol>
+
+
+================================================================================
+  1.5 HELPER SECURITY
+================================================================================
+
+  CARGA: Se carga automáticamente en muchos contextos.
+
+    esc($texto)
+    → ESCAPAR texto para prevenir ataques XSS.
+    → Convierte caracteres especiales: < > " ' & → entidades HTML.
+    → YA LO USAMOS EN TODAS LAS VISTAS:
+
+      <?= esc($pelicula['titulo']) ?>
+      <?= esc(session()->get('usuario_nombre')) ?>
+
+    esc($texto, 'js')
+    → Escapa para usar dentro de JavaScript.
+
+    esc($texto, 'css')
+    → Escapa para usar dentro de CSS.
+
+    esc($texto, 'url')
+    → Escapa para usar dentro de URLs.
+
+  IMPORTANTE: SIEMPRE usar esc() al mostrar datos del usuario en HTML.
+  Sin esc(), un usuario malicioso podría inyectar JavaScript:
+
+    SIN esc() (PELIGROSO):
+      <td><?= $pelicula['titulo'] ?></td>
+      Si el título es: <script>alert('Hackeado!')</script>
+      → SE EJECUTA el JavaScript malicioso en el navegador.
+
+    CON esc() (SEGURO):
+      <td><?= esc($pelicula['titulo']) ?></td>
+      Si el título es: <script>alert('Hackeado!')</script>
+      → Se muestra como TEXTO: &lt;script&gt;alert('Hackeado!')&lt;/script&gt;
+
+
+================================================================================
+  1.6 HELPER NUMBER
+================================================================================
+
+  CARGA: helper('number')
+
+    number_to_size(45678)
+    → "44.61 KB"
+
+    number_to_size(1234567890)
+    → "1.15 GB"
+
+    number_to_currency(1234.56, 'EUR', 'es_ES')
+    → "1.234,56 €"
+
+    number_to_amount(1234567)
+    → "1.23M" (o "1.23 million" según el idioma)
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: CREAR HELPERS PERSONALIZADOS
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 ¿DÓNDE SE CREAN?
+================================================================================
+
+  Los helpers personalizados se guardan en:
+
+    app/Helpers/
+
+  El nombre del archivo DEBE terminar en _helper.php:
+
+    app/Helpers/mi_helper.php         ✓ CORRECTO
+    app/Helpers/utilidades_helper.php  ✓ CORRECTO
+    app/Helpers/funciones.php          ✗ INCORRECTO (falta _helper)
+
+  Se cargan SIN el sufijo _helper:
+
+    helper('mi');            // Carga app/Helpers/mi_helper.php
+    helper('utilidades');    // Carga app/Helpers/utilidades_helper.php
+
+
+================================================================================
+  2.2 ESTRUCTURA DE UN HELPER
+================================================================================
+
+  Un helper es simplemente un archivo PHP con funciones.
+  IMPORTANTE: Envolver cada función en if (!function_exists()) para evitar
+  errores si el helper se carga dos veces.
+
+  ARCHIVO: app/Helpers/proyecto_helper.php
+  ────────────────────────────────────────
+
+    <?php
+
+    // FUNCIÓN PARA FORMATEAR FECHAS EN ESPAÑOL
+    if (!function_exists('fecha_es')) {
+        function fecha_es(string $fecha): string
+        {
+            $meses = [
+                '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo',
+                '04' => 'Abril', '05' => 'Mayo', '06' => 'Junio',
+                '07' => 'Julio', '08' => 'Agosto', '09' => 'Septiembre',
+                '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre',
+            ];
+
+            $timestamp = strtotime($fecha);
+            $dia = date('d', $timestamp);
+            $mes = $meses[date('m', $timestamp)];
+            $anio = date('Y', $timestamp);
+
+            return "$dia de $mes de $anio";
+        }
+    }
+
+    // FUNCIÓN PARA GENERAR UN SLUG (URL AMIGABLE)
+    if (!function_exists('generar_slug')) {
+        function generar_slug(string $texto): string
+        {
+            $texto = strtolower($texto);
+            $texto = str_replace(
+                ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü'],
+                ['a', 'e', 'i', 'o', 'u', 'n', 'u'],
+                $texto
+            );
+            $texto = preg_replace('/[^a-z0-9]+/', '-', $texto);
+            $texto = trim($texto, '-');
+            return $texto;
+        }
+    }
+
+    // FUNCIÓN PARA MOSTRAR EL ROL CON BADGE BOOTSTRAP
+    if (!function_exists('badge_rol')) {
+        function badge_rol(string $rol): string
+        {
+            $clases = [
+                'admin'   => 'bg-success',
+                'editor'  => 'bg-warning text-dark',
+                'usuario' => 'bg-info',
+            ];
+
+            $clase = $clases[$rol] ?? 'bg-secondary';
+            return '<span class="badge ' . $clase . '">'
+                   . strtoupper(esc($rol))
+                   . '</span>';
+        }
+    }
+
+    // FUNCIÓN PARA MOSTRAR "HACE X TIEMPO" (TIEMPO RELATIVO)
+    if (!function_exists('tiempo_relativo')) {
+        function tiempo_relativo(string $fecha): string
+        {
+            $ahora = time();
+            $antes = strtotime($fecha);
+            $diferencia = $ahora - $antes;
+
+            if ($diferencia < 60) {
+                return 'Hace un momento';
+            } elseif ($diferencia < 3600) {
+                $minutos = floor($diferencia / 60);
+                return "Hace {$minutos} minuto" . ($minutos > 1 ? 's' : '');
+            } elseif ($diferencia < 86400) {
+                $horas = floor($diferencia / 3600);
+                return "Hace {$horas} hora" . ($horas > 1 ? 's' : '');
+            } elseif ($diferencia < 2592000) {
+                $dias = floor($diferencia / 86400);
+                return "Hace {$dias} día" . ($dias > 1 ? 's' : '');
+            } else {
+                return fecha_es($fecha);
+            }
+        }
+    }
+
+    // FUNCIÓN PARA TRUNCAR TEXTO CON INDICADOR "VER MÁS"
+    if (!function_exists('texto_preview')) {
+        function texto_preview(string $texto, int $longitud = 100): string
+        {
+            if (mb_strlen($texto) <= $longitud) {
+                return esc($texto);
+            }
+
+            $recortado = mb_substr($texto, 0, $longitud);
+            $recortado = mb_substr($recortado, 0, mb_strrpos($recortado, ' '));
+            return esc($recortado) . '...';
+        }
+    }
+
+    // FUNCIÓN PARA FORMATEAR TAMAÑO DE ARCHIVO
+    if (!function_exists('tamano_archivo')) {
+        function tamano_archivo(int $bytes): string
+        {
+            $unidades = ['B', 'KB', 'MB', 'GB'];
+            $indice = 0;
+
+            while ($bytes >= 1024 && $indice < count($unidades) - 1) {
+                $bytes /= 1024;
+                $indice++;
+            }
+
+            return round($bytes, 2) . ' ' . $unidades[$indice];
+        }
+    }
+
+
+================================================================================
+  2.3 CARGAR EL HELPER
+================================================================================
+
+  OPCIÓN A: Cargar en un controlador específico:
+
+    public function __construct()
+    {
+        helper('proyecto');  // Carga app/Helpers/proyecto_helper.php
+    }
+
+  OPCIÓN B: Cargar en el BaseController (disponible en TODOS los controladores):
+
+  ARCHIVO: app/Controllers/BaseController.php
+  ───────────────────────────────────────────
+
+    protected $helpers = ['url', 'form', 'text', 'proyecto'];
+    // ↑ Todos los controladores que hereden de BaseController
+    //   tendrán estos helpers cargados automáticamente.
+
+  OPCIÓN C: Cargar en el constructor de un controlador:
+
+    public function __construct()
+    {
+        helper(['form', 'url', 'proyecto']);
+    }
+
+  OPCIÓN D: Autoload (cargar en TODA la aplicación):
+
+  ARCHIVO: app/Config/Autoload.php
+  ────────────────────────────────
+
+    public $helpers = ['url', 'form', 'proyecto'];
+    // ↑ Estos helpers se cargan en CADA petición, sin importar
+    //   qué controlador se ejecute.
+
+
+================================================================================
+  2.4 USAR LAS FUNCIONES EN LAS VISTAS
+================================================================================
+
+  Una vez cargado el helper, sus funciones son GLOBALES:
+
+  EN app/Views/peliculas/index.php:
+
+    <!-- Mostrar la fecha en español -->
+    <td><?= fecha_es($pelicula['created_at']) ?></td>
+    <!-- Resultado: "16 de Marzo de 2026" -->
+
+    <!-- Mostrar tiempo relativo -->
+    <td><?= tiempo_relativo($pelicula['created_at']) ?></td>
+    <!-- Resultado: "Hace 3 días" -->
+
+    <!-- Preview del texto -->
+    <td><?= texto_preview($pelicula['descripcion'], 80) ?></td>
+    <!-- Resultado: "Un niño mexicano apasionado por la música viaja al..." -->
+
+  EN app/Views/layout/main.php:
+
+    <!-- Badge del rol con colores -->
+    <?= badge_rol(session()->get('usuario_rol')) ?>
+    <!-- Resultado: <span class="badge bg-success">ADMIN</span> -->
+
+  EN EL CONTROLADOR (generar slug para URL amigable):
+
+    $slug = generar_slug('El Padrino - Parte II');
+    // Resultado: "el-padrino-parte-ii"
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: EXTENDER HELPERS DEL FRAMEWORK
+████████████████████████████████████████████████████████████████████████████████
+
+  Si quieres AÑADIR funciones a un helper existente de CodeIgniter (sin
+  modificar el original), crea un archivo con el MISMO nombre en app/Helpers/:
+
+  EJEMPLO: Extender el helper 'text' con funciones extra:
+
+  ARCHIVO: app/Helpers/text_helper.php
+  ────────────────────────────────────
+
+    <?php
+    // Las funciones originales de text_helper se cargan PRIMERO.
+    // Luego las funciones de ESTE archivo se añaden.
+
+    if (!function_exists('texto_mayusculas_iniciales')) {
+        function texto_mayusculas_iniciales(string $texto): string
+        {
+            return mb_convert_case(mb_strtolower($texto), MB_CASE_TITLE, 'UTF-8');
+        }
+    }
+
+  Ahora al hacer helper('text'), se cargan las funciones originales
+  DE CodeIgniter + las tuyas personalizadas.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: LISTADO COMPLETO DE HELPERS DE CODEIGNITER 4
+████████████████████████████████████████████████████████████████████████████████
+
+  ┌──────────────────┬──────────────────────────────────────────────────────┐
+  │ Helper           │ Funciones principales                                │
+  ├──────────────────┼──────────────────────────────────────────────────────┤
+  │ array            │ dot_array_search(), array_deep_search()              │
+  │ cookie           │ set_cookie(), get_cookie(), delete_cookie()          │
+  │ date             │ now(), timezone_select(), timezones()                │
+  │ filesystem       │ directory_map(), write_file(), delete_files()        │
+  │ form             │ form_open(), csrf_field(), set_value()               │
+  │ html             │ img(), link_tag(), script_tag(), ul(), ol()          │
+  │ inflector        │ singular(), plural(), camelize(), underscore()       │
+  │ number           │ number_to_size(), number_to_currency()               │
+  │ security         │ esc(), sanitize_filename()                           │
+  │ test             │ fake() (para generar datos de prueba)                │
+  │ text             │ character_limiter(), word_limiter(), excerpt()        │
+  │ url              │ base_url(), site_url(), current_url(), redirect()    │
+  │ xml              │ xml_convert()                                        │
+  └──────────────────┴──────────────────────────────────────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: BUENAS PRÁCTICAS CON HELPERS
+████████████████████████████████████████████████████████████████████████████████
+
+  1. SIEMPRE usar if (!function_exists()) al definir funciones.
+     Previene errores si el helper se carga dos veces.
+
+  2. NO poner lógica de negocio en helpers.
+     Los helpers son para utilidades genéricas (formato, conversión, etc.)
+     La lógica de negocio va en Modelos o Librerías.
+
+  3. Nombrar las funciones de forma DESCRIPTIVA:
+     ✓ fecha_es(), generar_slug(), badge_rol()
+     ✗ f1(), procesar(), helper()
+
+  4. Un helper por TEMÁTICA:
+     ✓ app/Helpers/fecha_helper.php → Funciones de fechas
+     ✓ app/Helpers/formato_helper.php → Funciones de formato
+     ✗ app/Helpers/todo_helper.php → Mezcla de todo
+
+  5. Documentar los parámetros y el valor de retorno:
+     /**
+      * Formatea una fecha en español.
+      * @param string $fecha Fecha en formato Y-m-d H:i:s
+      * @return string Fecha formateada: "16 de Marzo de 2026"
+      */
+
+  6. Cargar en BaseController lo que se usa en muchas partes.
+     Cargar en el controlador específico lo que solo se usa ahí.
+     NO poner TODO en Autoload (gasta memoria innecesariamente).
+
+
+████████████████████████████████████████████████████████████████████████████████
+  RESUMEN
+████████████████████████████████████████████████████████████████████████████████
+
+  1. Helpers = archivos con funciones sueltas (no clases)
+  2. Se guardan en app/Helpers/ con sufijo _helper.php
+  3. Se cargan con helper('nombre') (sin el sufijo)
+  4. CodeIgniter trae helpers integrados: url, form, text, html, security...
+  5. Puedes crear los tuyos en app/Helpers/mi_helper.php
+  6. Cada función debe ir envuelta en if (!function_exists())
+  7. Se pueden cargar en: controlador, BaseController, o Autoload
+  8. Puedes extender helpers del framework creando uno con el mismo nombre
+
+================================================================================

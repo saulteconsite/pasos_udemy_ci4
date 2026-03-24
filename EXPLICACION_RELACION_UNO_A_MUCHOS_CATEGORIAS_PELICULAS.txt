@@ -1,0 +1,425 @@
+=====================================================================================
+ RELACIÓN UNO A MUCHOS (1:N) ENTRE CATEGORÍAS Y PELÍCULAS - PASO A PASO
+=====================================================================================
+
+ CONCEPTO:
+ Una CATEGORÍA tiene MUCHAS películas.
+ Una PELÍCULA pertenece a UNA SOLA categoría (o a ninguna).
+
+ Ejemplo:
+   Categoría "Acción" → Película "Matrix", Película "John Wick", Película "Mad Max"
+   Categoría "Terror" → Película "It", Película "El Exorcista"
+   Película "Matrix" → Solo pertenece a "Acción" (no puede estar en dos categorías)
+
+
+=====================================================================================
+ PASO 1: YA TENÍAMOS LA TABLA PELICULAS (MIGRACIÓN ORIGINAL)
+=====================================================================================
+
+ ARCHIVO: app/Database/Migrations/2026-03-12-113339_Peliculas.php
+
+ Esta migración ya existía ANTES de crear la relación.
+ La tabla peliculas solo tenía estos campos:
+
+   ┌──────────────┬──────────┬──────────────────────────┐
+   │ Campo        │ Tipo     │ Descripción              │
+   ├──────────────┼──────────┼──────────────────────────┤
+   │ id           │ INT(11)  │ Clave primaria, auto_inc │
+   │ titulo       │ VARCHAR  │ Nombre de la película    │
+   │ descripcion  │ TEXT     │ Descripción, puede null  │
+   │ created_at   │ DATETIME │ Fecha de creación        │
+   │ updated_at   │ DATETIME │ Fecha de actualización   │
+   └──────────────┴──────────┴──────────────────────────┘
+
+ NO tenía ningún campo para saber a qué categoría pertenecía.
+
+
+=====================================================================================
+ PASO 2: CREAMOS LA TABLA CATEGORÍAS (NUEVA MIGRACIÓN)
+=====================================================================================
+
+ ARCHIVO: app/Database/Migrations/2026-03-12-114415_Categorias.php
+ COMANDO: php spark migrate
+
+ Creamos la tabla donde vivirán las categorías:
+
+   ┌──────────────┬──────────┬──────────────────────────┐
+   │ Campo        │ Tipo     │ Descripción              │
+   ├──────────────┼──────────┼──────────────────────────┤
+   │ id           │ INT(11)  │ Clave primaria, auto_inc │
+   │ titulo       │ VARCHAR  │ Nombre de la categoría   │
+   │ created_at   │ DATETIME │ Fecha de creación        │
+   │ updated_at   │ DATETIME │ Fecha de actualización   │
+   └──────────────┴──────────┴──────────────────────────┘
+
+ Código clave de la migración:
+
+   $this->forge->addField([
+       'id' => [
+           'type' => 'INT', 'constraint' => 11,
+           'unsigned' => true, 'auto_increment' => true,
+       ],
+       'titulo' => [
+           'type' => 'VARCHAR', 'constraint' => '100',
+       ],
+       'created_at' => ['type' => 'DATETIME', 'null' => true],
+       'updated_at' => ['type' => 'DATETIME', 'null' => true],
+   ]);
+   $this->forge->addKey('id', true);
+   $this->forge->createTable('categorias');
+
+
+=====================================================================================
+ PASO 3: CREAMOS LA MIGRACIÓN PARA AÑADIR categoria_id A PELICULAS
+=====================================================================================
+
+ ARCHIVO: app/Database/Migrations/2026-03-16-140000_AddCategoriaIdToPeliculas.php
+ COMANDO: php spark make:migration AddCategoriaIdToPeliculas
+          php spark migrate
+
+ ESTO ES LA CLAVE DE LA RELACIÓN 1:N.
+ Añadimos una columna 'categoria_id' a la tabla peliculas que apunta
+ al 'id' de la tabla categorias.
+
+ Así queda la tabla peliculas DESPUÉS de esta migración:
+
+   ┌───────────────┬──────────┬──────────────────────────────────────┐
+   │ Campo         │ Tipo     │ Descripción                          │
+   ├───────────────┼──────────┼──────────────────────────────────────┤
+   │ id            │ INT(11)  │ Clave primaria                       │
+   │ titulo        │ VARCHAR  │ Nombre de la película                │
+   │ descripcion   │ TEXT     │ Descripción                          │
+   │ categoria_id  │ INT(11)  │ ◄── NUEVO! Clave foránea a categorias│
+   │ created_at    │ DATETIME │ Fecha de creación                    │
+   │ updated_at    │ DATETIME │ Fecha de actualización               │
+   └───────────────┴──────────┴──────────────────────────────────────┘
+
+ Código clave de la migración:
+
+   $campos = [
+       'categoria_id' => [
+           'type'       => 'INT',
+           'constraint' => 11,
+           'unsigned'   => true,    // Mismo tipo que categorias.id
+           'null'       => true,    // Puede ser NULL (película sin categoría)
+           'after'      => 'descripcion',  // Se coloca después de descripción
+       ],
+   ];
+   $this->forge->addColumn('peliculas', $campos);
+
+ ¿Por qué 'null' => true?
+   Porque una película puede NO tener categoría asignada.
+   Si fuera 'null' => false, OBLIGARÍAMOS a que siempre tenga una.
+
+ ¿Por qué 'unsigned' => true?
+   Porque el campo id de categorias es unsigned (sin signo, solo positivos).
+   La clave foránea DEBE ser del mismo tipo que la clave primaria a la que apunta.
+
+ RELACIÓN VISUAL:
+
+   TABLA CATEGORIAS              TABLA PELICULAS
+   ┌────┬──────────┐             ┌────┬─────────┬──────────────┐
+   │ id │ titulo   │             │ id │ titulo  │ categoria_id │
+   ├────┼──────────┤             ├────┼─────────┼──────────────┤
+   │  1 │ Acción   │◄────────── │  1 │ Matrix  │      1       │
+   │  2 │ Terror   │◄──┐        │  2 │ John W. │      1       │
+   │  3 │ Comedia  │   │        │  3 │ It      │      2       │
+   └────┴──────────┘   └─────── │  4 │ El Exor │      2       │
+                                │  5 │ Indie   │     NULL     │
+                                └────┴─────────┴──────────────┘
+
+   Matrix y John Wick → categoria_id = 1 → apuntan a "Acción"
+   It y El Exorcista  → categoria_id = 2 → apuntan a "Terror"
+   Indie              → categoria_id = NULL → no tiene categoría
+
+
+=====================================================================================
+ PASO 4: CREAMOS EL MODELO CategoriaModel
+=====================================================================================
+
+ ARCHIVO: app/Models/CategoriaModel.php
+ COMANDO: php spark make:model CategoriaModel
+
+ Qué configuramos:
+
+   protected $table      = 'categorias';       // Tabla en la BD
+   protected $primaryKey = 'id';                // Clave primaria
+   protected $allowedFields = ['titulo'];       // Campos editables
+   protected $useTimestamps = true;             // Gestión automática de fechas
+
+   protected $validationRules = [
+       'titulo' => 'required|min_length[3]|max_length[100]|is_unique[categorias.titulo,id,{id}]',
+   ];
+
+ La regla is_unique[categorias.titulo,id,{id}] evita categorías duplicadas
+ pero permite que al EDITAR una categoría mantenga su propio nombre sin error.
+
+
+=====================================================================================
+ PASO 5: MODIFICAMOS EL MODELO PeliculaModel
+=====================================================================================
+
+ ARCHIVO: app/Models/PeliculaModel.php
+
+ Qué AÑADIMOS:
+
+ 5a) Añadimos 'categoria_id' a $allowedFields:
+
+     ANTES:  protected $allowedFields = ['titulo', 'descripcion'];
+     DESPUÉS: protected $allowedFields = ['titulo', 'descripcion', 'categoria_id'];
+
+     Sin esto, CI4 IGNORA silenciosamente el campo categoria_id al hacer save().
+
+ 5b) Añadimos regla de validación para categoria_id:
+
+     'categoria_id' => 'permit_empty|is_natural_no_zero',
+
+     - permit_empty: Puede estar vacío (película sin categoría)
+     - is_natural_no_zero: Si tiene valor, debe ser un número entero positivo (1, 2, 3...)
+
+ 5c) Creamos el método getPeliculasConCategoria():
+
+     public function getPeliculasConCategoria()
+     {
+         return $this->select('peliculas.*, categorias.titulo AS categoria_nombre')
+                      ->join('categorias', 'categorias.id = peliculas.categoria_id', 'left')
+                      ->orderBy('peliculas.id', 'DESC')
+                      ->findAll();
+     }
+
+     ¿Por qué necesitamos este método?
+
+     Porque si hacemos $peliculaModel->findAll(), obtenemos:
+       ['id' => 1, 'titulo' => 'Matrix', 'categoria_id' => 1]
+
+     Solo tenemos el NÚMERO 1, pero no sabemos que es "Acción".
+     Con el JOIN traemos también el nombre de la categoría:
+       ['id' => 1, 'titulo' => 'Matrix', 'categoria_id' => 1, 'categoria_nombre' => 'Acción']
+
+     Usamos LEFT JOIN (no INNER JOIN) para que las películas SIN categoría
+     (categoria_id = NULL) también aparezcan en los resultados.
+
+
+=====================================================================================
+ PASO 6: MODIFICAMOS EL CONTROLADOR Pelicula
+=====================================================================================
+
+ ARCHIVO: app/Controllers/Pelicula.php
+
+ Qué AÑADIMOS:
+
+ 6a) Importamos el modelo de categorías:
+
+     use App\Models\CategoriaModel;
+
+ 6b) Creamos propiedad e instancia en el constructor:
+
+     protected $categoriaModel;
+
+     public function __construct()
+     {
+         $this->peliculaModel = new PeliculaModel();
+         $this->categoriaModel = new CategoriaModel();  // ◄── NUEVO
+     }
+
+ 6c) En el método index() - Pasamos las categorías al listado:
+
+     $datos['categorias'] = $this->categoriaModel->orderBy('titulo', 'ASC')->findAll();
+
+     Esto se usa para el SELECT de filtro por categoría en la vista.
+
+ 6d) En el método create() - Pasamos categorías al formulario:
+
+     $datos['categorias'] = $this->categoriaModel->orderBy('titulo', 'ASC')->findAll();
+
+     Esto genera las <option> del <select> de categorías en el formulario.
+
+ 6e) En el método store() - Recogemos categoria_id del POST:
+
+     $datos = [
+         'titulo'       => $this->request->getPost('titulo'),
+         'descripcion'  => $this->request->getPost('descripcion'),
+         'categoria_id' => $this->request->getPost('categoria_id') ?: null,
+     ];
+
+     El ?: null convierte string vacío "" a NULL.
+     Si el usuario no selecciona categoría, el select envía "" (vacío).
+     En la BD guardamos NULL, no un string vacío.
+
+ 6f) En el método edit() - Pasamos categorías para preseleccionar la actual:
+
+     $datos['categorias'] = $this->categoriaModel->orderBy('titulo', 'ASC')->findAll();
+
+ 6g) En el método update() - Recogemos categoria_id igual que en store():
+
+     'categoria_id' => $this->request->getPost('categoria_id') ?: null,
+
+
+=====================================================================================
+ PASO 7: MODIFICAMOS LA VISTA peliculas/create.php
+=====================================================================================
+
+ ARCHIVO: app/Views/peliculas/create.php
+
+ AÑADIMOS un <select> para elegir la categoría en el formulario de creación:
+
+     <div class="mb-3">
+         <label for="categoria_id" class="form-label">Categoría</label>
+         <select class="form-select" id="categoria_id" name="categoria_id">
+             <option value="">-- Seleccionar categoría --</option>
+             <?php foreach ($categorias as $categoria): ?>
+                 <option value="<?= $categoria['id'] ?>"
+                     <?= old('categoria_id') == $categoria['id'] ? 'selected' : '' ?>>
+                     <?= esc($categoria['titulo']) ?>
+                 </option>
+             <?php endforeach; ?>
+         </select>
+     </div>
+
+ - El foreach recorre las categorías que pasó el controlador
+ - Cada categoría se convierte en una <option> con value = su id
+ - old('categoria_id') mantiene la selección si hay error de validación
+
+
+=====================================================================================
+ PASO 8: MODIFICAMOS LA VISTA peliculas/edit.php
+=====================================================================================
+
+ ARCHIVO: app/Views/peliculas/edit.php
+
+ Igual que en create, pero preseleccionamos la categoría actual de la película:
+
+     <option value="<?= $categoria['id'] ?>"
+         <?= old('categoria_id', $pelicula['categoria_id'] ?? '') == $categoria['id'] ? 'selected' : '' ?>>
+
+ La diferencia clave es: old('categoria_id', $pelicula['categoria_id'] ?? '')
+   - Primero intenta usar old() (si hubo error de validación y vuelve al form)
+   - Si no hay old(), usa el valor actual de la película en la BD
+
+
+=====================================================================================
+ PASO 9: MODIFICAMOS LA VISTA peliculas/index.php
+=====================================================================================
+
+ ARCHIVO: app/Views/peliculas/index.php
+
+ 9a) Añadimos columna "Categoría" en la tabla del listado:
+
+     En el <thead>:
+         <th>Categoría</th>
+
+     En el <tbody>, dentro del foreach:
+         <td>
+             <?php if (!empty($pelicula['categoria_nombre'])): ?>
+                 <span class="badge bg-primary"><?= esc($pelicula['categoria_nombre']) ?></span>
+             <?php else: ?>
+                 <span class="text-muted">Sin categoría</span>
+             <?php endif; ?>
+         </td>
+
+     Si la película tiene categoría, muestra un badge azul con el nombre.
+     Si no tiene (NULL), muestra "Sin categoría" en gris.
+
+ 9b) Añadimos select de filtro por categoría en la barra de filtros:
+
+     <select name="categoria_id" id="categoria_id" class="form-select">
+         <option value="">-- Todas --</option>
+         <?php foreach ($categorias as $cat): ?>
+             <option value="<?= $cat['id'] ?>"
+                 <?= ($filtros['categoria_id'] ?? '') == $cat['id'] ? 'selected' : '' ?>>
+                 <?= esc($cat['titulo']) ?>
+             </option>
+         <?php endforeach; ?>
+     </select>
+
+
+=====================================================================================
+ PASO 10 (OPCIONAL): CREAMOS EL SEEDER DE CATEGORÍAS
+=====================================================================================
+
+ ARCHIVO: app/Database/Seeds/CategoriaSeeder.php
+ COMANDO: php spark make:seeder CategoriaSeeder
+          php spark db:seed CategoriaSeeder
+
+ Insertamos datos de prueba:
+
+     $categorias = [
+         ['titulo' => 'Acción'],
+         ['titulo' => 'Comedia'],
+         ['titulo' => 'Drama'],
+         ['titulo' => 'Terror'],
+         ['titulo' => 'Ciencia Ficción'],
+         ['titulo' => 'Romance'],
+         ['titulo' => 'Animación'],
+         ['titulo' => 'Suspenso'],
+         ['titulo' => 'Aventura'],
+         ['titulo' => 'Documental'],
+     ];
+
+
+=====================================================================================
+ RESUMEN: TODOS LOS ARCHIVOS TOCADOS Y QUÉ SE HIZO EN CADA UNO
+=====================================================================================
+
+ ARCHIVOS NUEVOS CREADOS:
+ ┌────────────────────────────────────────────────────────────┬───────────────────────────────┐
+ │ Archivo                                                   │ Qué hace                      │
+ ├────────────────────────────────────────────────────────────┼───────────────────────────────┤
+ │ Migrations/2026-03-12-114415_Categorias.php               │ Crea tabla categorias en BD   │
+ │ Migrations/2026-03-16-140000_AddCategoriaIdToPeliculas.php│ Añade columna categoria_id    │
+ │ Models/CategoriaModel.php                                 │ Modelo para tabla categorias  │
+ │ Seeds/CategoriaSeeder.php                                 │ Datos de prueba               │
+ └────────────────────────────────────────────────────────────┴───────────────────────────────┘
+
+ ARCHIVOS EXISTENTES MODIFICADOS:
+ ┌────────────────────────────────────┬───────────────────────────────────────────────────────┐
+ │ Archivo                           │ Qué se añadió                                         │
+ ├────────────────────────────────────┼───────────────────────────────────────────────────────┤
+ │ Models/PeliculaModel.php          │ 'categoria_id' en allowedFields                       │
+ │                                   │ Regla de validación para categoria_id                 │
+ │                                   │ Método getPeliculasConCategoria() con JOIN             │
+ ├────────────────────────────────────┼───────────────────────────────────────────────────────┤
+ │ Controllers/Pelicula.php          │ use CategoriaModel + instancia en constructor         │
+ │                                   │ Pasar categorías a las vistas (index, create, edit)   │
+ │                                   │ Recoger categoria_id del POST (store, update)         │
+ ├────────────────────────────────────┼───────────────────────────────────────────────────────┤
+ │ Views/peliculas/create.php        │ <select> para elegir categoría                        │
+ ├────────────────────────────────────┼───────────────────────────────────────────────────────┤
+ │ Views/peliculas/edit.php          │ <select> para elegir categoría (con preselección)     │
+ ├────────────────────────────────────┼───────────────────────────────────────────────────────┤
+ │ Views/peliculas/index.php         │ Columna "Categoría" en la tabla                      │
+ │                                   │ Select de filtro por categoría                        │
+ └────────────────────────────────────┴───────────────────────────────────────────────────────┘
+
+
+=====================================================================================
+ FLUJO VISUAL COMPLETO DE LA RELACIÓN
+=====================================================================================
+
+ ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+ │   VISTA      │     │   CONTROLADOR    │     │     MODELO       │
+ │ create.php   │     │  Pelicula.php    │     │ PeliculaModel    │
+ │              │     │                  │     │                  │
+ │ <select>     │POST │ store() recoge   │save │ Valida campo     │
+ │ categoria_id ├────►│ categoria_id del ├────►│ categoria_id     │
+ │ = 3          │     │ formulario       │    │ (permit_empty|   │
+ │              │     │ ?: null          │     │ is_natural_no_0) │
+ └──────────────┘     └──────────────────┘     └────────┬─────────┘
+                                                        │
+                                                        ▼
+                                               ┌──────────────────┐
+                                               │   BASE DE DATOS  │
+                                               │                  │
+                                               │ INSERT peliculas │
+                                               │ categoria_id = 3 │
+                                               └──────────────────┘
+
+ ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+ │   VISTA      │     │   CONTROLADOR    │     │     MODELO       │
+ │ index.php    │     │  Pelicula.php    │     │ PeliculaModel    │
+ │              │     │                  │     │                  │
+ │ Muestra      │◄────┤ index() pasa     │◄────┤getPeliculasCon   │
+ │ badge con    │datos│ $datos con       │array│Categoria() hace  │
+ │ "Comedia"    │     │ peliculas +      │     │LEFT JOIN con     │
+ │              │     │ categoria_nombre │     │tabla categorias  │
+ └──────────────┘     └──────────────────┘     └──────────────────┘

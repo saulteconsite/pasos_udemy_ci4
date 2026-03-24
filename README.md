@@ -3,7 +3,7 @@
 ![img](https://i.pinimg.com/originals/a1/f8/be/a1f8be54a08a324c83e747a8fa5ed660.gif)
 
 > [!NOTE]
-> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 18 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS, CATEGORÍAS Y ETIQUETAS, RELACIONES UNO A MUCHOS (1:N) Y MUCHOS A MUCHOS (N:M), CARGA DE ARCHIVOS (IMÁGENES), VALIDACIONES AVANZADAS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO), API REST COMPLETA Y LISTADOS PAGINADOS CON FILTROS AVANZADOS (BÚSQUEDA, CATEGORÍA, ETIQUETA Y LIKE AGRUPADO). TODO DESPLEGADO CON DDEV EN WSL***
+> ***ESTE PROYECTO ES EL RESULTADO DE LAS SECCIONES 3 A 25 DEL CURSO DE UDEMY "CODEIGNITER 4 DESDE CERO + INTEGRACIÓN CON BOOTSTRAP 4 O 5". INCLUYE LOS CRUDS COMPLETOS DE PELÍCULAS, CATEGORÍAS Y ETIQUETAS, RELACIONES UNO A MUCHOS (1:N) Y MUCHOS A MUCHOS (N:M), CARGA DE ARCHIVOS (IMÁGENES), VALIDACIONES AVANZADAS, SISTEMA DE AUTENTICACIÓN CON LOGIN/REGISTRO, FILTROS DE SEGURIDAD, CONTRASEÑAS HASHEADAS CON BCRYPT, ROLES DE USUARIO (ADMIN/USUARIO), API REST COMPLETA Y LISTADOS PAGINADOS CON FILTROS AVANZADOS (BÚSQUEDA, CATEGORÍA, ETIQUETA Y LIKE AGRUPADO). ADEMÁS INCLUYE API REST AVANZADA CON PAGINACIÓN/FILTROS/UPLOAD (SECCIÓN 19), DOCUMENTACIÓN DE CODEIGNITER SHIELD (SECCIONES 20-21), COMPONENTES AVANZADOS DEL FRAMEWORK (SECCIÓN 22), LIBRERÍA PERSONALIZADA PDFGENERATOR (SECCIÓN 23), HELPER PERSONALIZADO CON FUNCIONES UTILITARIAS (SECCIÓN 24) Y SISTEMA CRUD AUTOMATIZADO CON CONTROLADOR BASE Y COMANDO SPARK (SECCIÓN 25). TODO DESPLEGADO CON DDEV EN WSL***
 
 ---
 
@@ -20,8 +20,9 @@ app/
 │   ├── Categoria.php                 # CONTROLADOR CRUD CATEGORÍAS (WEB)
 │   ├── Etiqueta.php                  # CONTROLADOR CRUD ETIQUETAS/TAGS (WEB)
 │   ├── Auth.php                      # CONTROLADOR AUTENTICACIÓN (LOGIN, REGISTRO, LOGOUT)
-│   ├── ApiPelicula.php               # CONTROLADOR API REST PELÍCULAS (JSON)
-│   └── ApiCategoria.php              # CONTROLADOR API REST CATEGORÍAS (JSON)
+│   ├── ApiPelicula.php               # CONTROLADOR API REST PELÍCULAS (JSON) + UPLOAD/ETIQUETAS (SECCIÓN 19)
+│   ├── ApiCategoria.php              # CONTROLADOR API REST CATEGORÍAS (JSON)
+│   └── CrudController.php            # CONTROLADOR BASE ABSTRACTO: CRUD AUTOMATIZADO (SECCIÓN 25)
 ├── Database/
 │   ├── Migrations/
 │   │   ├── 2026-03-12-113339_Peliculas.php               # MIGRACIÓN TABLA PELICULAS
@@ -36,9 +37,16 @@ app/
 │       ├── CategoriaSeeder.php       # DATOS DE PRUEBA: 10 CATEGORÍAS
 │       ├── UsuarioSeeder.php         # DATOS DE PRUEBA: 3 USUARIOS (ADMIN + NORMALES)
 │       └── EtiquetaSeeder.php        # DATOS DE PRUEBA: 8 ETIQUETAS
+├── Commands/
+│   └── GenerarCrud.php              # COMANDO SPARK: php spark crud:generar (SECCIÓN 25)
 ├── Filters/
 │   ├── AuthFilter.php                # FILTRO: VERIFICA QUE EL USUARIO ESTÉ LOGUEADO
-│   └── AdminFilter.php               # FILTRO: VERIFICA QUE EL USUARIO SEA ADMIN
+│   ├── AdminFilter.php               # FILTRO: VERIFICA QUE EL USUARIO SEA ADMIN
+│   └── ApiAuthFilter.php             # FILTRO: VERIFICA TOKEN EN API REST (SECCIÓN 19)
+├── Helpers/
+│   └── proyecto_helper.php           # HELPER PERSONALIZADO: FUNCIONES UTILITARIAS (SECCIÓN 24)
+├── Libraries/
+│   └── PdfGenerator.php              # LIBRERÍA PERSONALIZADA: GENERACIÓN DE PDFs (SECCIÓN 23)
 ├── Models/
 │   ├── PeliculaModel.php             # MODELO PELÍCULAS (JOIN CATEGORÍA + FILTROS PAGINADOS)
 │   ├── CategoriaModel.php            # MODELO CATEGORÍAS (CON VALIDACIÓN, UNIQUE Y MENSAJES)
@@ -690,6 +698,7 @@ session()->set([
 ### `CODEIGNITER 4 - SPARK`
 
 ```bash
+> ddev exec php spark crud:generar Producto # GENERAR CRUD COMPLETO (SECCIÓN 25)
 > ddev exec php spark migrate              # EJECUTAR MIGRACIONES
 > ddev exec php spark migrate:status       # VER ESTADO DE LAS MIGRACIONES
 > ddev exec php spark migrate:rollback     # DESHACER LA ÚLTIMA MIGRACIÓN
@@ -1156,6 +1165,521 @@ https://udemy.ddev.site/etiquetas?busqueda=clasico
 
 ---
 
+
+## `SECCIÓN 19: REST API - RELACIONES Y MÉTODOS AVANZADOS 🔌`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE AMPLÍA LA API REST DE LA SECCIÓN 12 CON FUNCIONALIDADES AVANZADAS: PAGINACIÓN DE RESULTADOS, FILTROS/BÚSQUEDA DESDE LA API, SUBIDA DE IMÁGENES POR API, ASIGNACIÓN DE ETIQUETAS POR API Y PROTECCIÓN CON FILTRO DE TOKENS. LA API PASA DE SER BÁSICA A ESTAR LISTA PARA SER CONSUMIDA POR UN FRONTEND REAL (VUE, REACT, MÓVIL, ETC.)***
+
+### `ARCHIVOS QUE ENTRAN EN JUEGO`
+
+| ARCHIVO | QUÉ SE HACE |
+|---|---|
+| ***`app/Controllers/ApiPelicula.php`*** | ***SE MODIFICA: SE AÑADEN LOS MÉTODOS `upload()` Y `asignarEtiquetas()`. EL MÉTODO `index()` AHORA USA `getPeliculasFiltradas()` CON PAGINACIÓN Y DEVUELVE INFORMACIÓN DE PAGINACIÓN EN LA RESPUESTA JSON*** |
+| ***`app/Filters/ApiAuthFilter.php`*** | ***SE CREA: NUEVO FILTRO QUE VERIFICA EL HEADER `Authorization: Bearer <token>` EN LAS PETICIONES API. SI NO HAY TOKEN, DEVUELVE ERROR 401 EN JSON (NO REDIRIGE AL LOGIN COMO EL AUTHFILTER)*** |
+| ***`app/Config/Routes.php`*** | ***SE MODIFICA: SE AÑADEN LAS RUTAS `POST /api/peliculas/upload/(:num)` Y `POST /api/peliculas/(:num)/etiquetas`*** |
+| ***`app/Config/Filters.php`*** | ***SE MODIFICA: SE REGISTRA EL ALIAS `apiauth` PARA EL NUEVO FILTRO `ApiAuthFilter`*** |
+| ***`app/Models/PeliculaModel.php`*** | ***YA EXISTÍA: SE REUTILIZA EL MÉTODO `getPeliculasFiltradas()` DE LA SECCIÓN 18 PARA LA API*** |
+| ***`app/Models/PeliculaEtiquetaModel.php`*** | ***YA EXISTÍA: SE REUTILIZA EL MÉTODO `sincronizar()` PARA EL ENDPOINT DE ETIQUETAS*** |
+
+### `NUEVOS ENDPOINTS DE LA API`
+
+| MÉTODO HTTP | ENDPOINT | ACCIÓN |
+|---|---|---|
+| ***GET*** | ***`/api/peliculas?busqueda=matrix&page=2`*** | ***LISTADO CON PAGINACIÓN Y FILTROS*** |
+| ***GET*** | ***`/api/peliculas?categoria_id=5&per_page=20`*** | ***FILTRAR POR CATEGORÍA, 20 POR PÁGINA*** |
+| ***POST*** | ***`/api/peliculas/upload/5`*** | ***SUBIR IMAGEN A UNA PELÍCULA (FORM-DATA)*** |
+| ***POST*** | ***`/api/peliculas/5/etiquetas`*** | ***ASIGNAR ETIQUETAS `{"etiquetas": [1,3,7]}`*** |
+
+### `PAGINACIÓN EN LA API`
+
+***EL ENDPOINT `GET /api/peliculas` AHORA DEVUELVE INFORMACIÓN DE PAGINACIÓN JUNTO CON LOS DATOS:***
+
+```json
+{
+    "status": 200,
+    "mensaje": "LISTADO DE PELÍCULAS",
+    "datos": [...],
+    "paginacion": {
+        "pagina_actual": 1,
+        "por_pagina": 10,
+        "total_registros": 47,
+        "total_paginas": 5
+    }
+}
+```
+
+***EL CLIENTE PUEDE CONTROLAR LA PAGINACIÓN CON LOS PARÁMETROS `page` Y `per_page`:***
+
+```bash
+# PÁGINA 1, 10 POR PÁGINA (POR DEFECTO)
+> curl https://udemy.ddev.site/api/peliculas
+
+# PÁGINA 2, 20 POR PÁGINA
+> curl "https://udemy.ddev.site/api/peliculas?page=2&per_page=20"
+
+# BUSCAR "matrix" EN PÁGINA 1
+> curl "https://udemy.ddev.site/api/peliculas?busqueda=matrix"
+```
+
+### `SUBIDA DE IMÁGENES POR API`
+
+```bash
+# SUBIR IMAGEN A LA PELÍCULA CON ID 5
+> curl -X POST https://udemy.ddev.site/api/peliculas/upload/5 \
+    -F "imagen=@/ruta/a/mi-foto.jpg"
+```
+
+### `ASIGNAR ETIQUETAS POR API`
+
+```bash
+# ASIGNAR LAS ETIQUETAS 1, 3 Y 7 A LA PELÍCULA CON ID 5
+> curl -X POST https://udemy.ddev.site/api/peliculas/5/etiquetas \
+    -H "Content-Type: application/json" \
+    -d '{"etiquetas": [1, 3, 7]}'
+```
+
+### `FILTRO ApiAuthFilter (PROTECCIÓN DE LA API)`
+
+***SE CREA UN FILTRO ESPECÍFICO PARA LA API (`app/Filters/ApiAuthFilter.php`) QUE VERIFICA EL TOKEN EN EL HEADER `Authorization`. A DIFERENCIA DEL AUTHFILTER QUE REDIRIGE AL LOGIN (HTML), ESTE DEVUELVE ERROR 401 EN JSON:***
+
+```json
+{
+    "status": 401,
+    "mensaje": "TOKEN DE AUTENTICACIÓN REQUERIDO. ENVÍA EL HEADER: Authorization: Bearer tu_token"
+}
+```
+
+***EL FILTRO SE REGISTRA EN `app/Config/Filters.php` CON EL ALIAS `apiauth`. PARA ACTIVARLO EN LAS RUTAS DE LA API, SE AÑADIRÍA:***
+
+```php
+'apiauth' => ['before' => ['api/*']],
+```
+
+---
+
+## `SECCIONES 20-21: CODEIGNITER SHIELD - AUTENTICACIÓN, GRUPOS Y PERMISOS 🛡️`
+
+> [!NOTE]
+> ***ESTAS SECCIONES SON TEÓRICAS. EXPLICAN CODEIGNITER SHIELD, EL PAQUETE OFICIAL DE AUTENTICACIÓN DEL FRAMEWORK. EN NUESTRO PROYECTO MANTENEMOS EL SISTEMA DE LOGIN MANUAL (AuthFilter, AdminFilter, UsuarioModel) PARA FINES EDUCATIVOS, PERO SE DOCUMENTA CÓMO SHIELD PODRÍA REEMPLAZARLO CON FUNCIONALIDADES MÁS AVANZADAS***
+
+### `¿QUÉ ES CODEIGNITER SHIELD?`
+
+***SHIELD ES EL PAQUETE OFICIAL DE AUTENTICACIÓN Y AUTORIZACIÓN PARA CODEIGNITER 4, MANTENIDO POR EL EQUIPO DEL FRAMEWORK. INCLUYE:***
+
+| FUNCIONALIDAD | MANUAL (NUESTRO PROYECTO) | CON SHIELD |
+|---|---|---|
+| ***LOGIN/REGISTRO*** | ***LO HICIMOS MANUALMENTE*** | ***YA VIENE HECHO*** |
+| ***HASH DE CONTRASEÑAS*** | ***CALLBACK beforeInsert*** | ***AUTOMÁTICO (ARGON2ID)*** |
+| ***RECORDAR SESIÓN*** | ***NO TENEMOS*** | ***"REMEMBER ME" INCLUIDO*** |
+| ***RECUPERAR CONTRASEÑA*** | ***NO TENEMOS*** | ***EMAIL + TOKEN INCLUIDO*** |
+| ***AUTH POR TOKENS (API)*** | ***NO TENEMOS*** | ***PERSONAL ACCESS TOKENS*** |
+| ***GRUPOS DE USUARIOS*** | ***SOLO "ADMIN/USUARIO"*** | ***SISTEMA COMPLETO DE GRUPOS*** |
+| ***PERMISOS GRANULARES*** | ***NO TENEMOS*** | ***SISTEMA COMPLETO DE PERMISOS*** |
+| ***BLOQUEO POR INTENTOS*** | ***NO TENEMOS*** | ***THROTTLING AUTOMÁTICO*** |
+
+### `INSTALACIÓN Y CONFIGURACIÓN`
+
+```bash
+# INSTALAR SHIELD CON COMPOSER
+> ddev composer require codeigniter4/shield
+
+# EJECUTAR EL SETUP AUTOMÁTICO (CREA TABLAS, CONFIGURACIÓN, FILTROS)
+> ddev exec php spark shield:setup
+
+# EJECUTAR LAS MIGRACIONES DE SHIELD
+> ddev exec php spark migrate
+```
+
+### `GRUPOS Y PERMISOS`
+
+***SHIELD PERMITE DEFINIR GRUPOS (ROLES) Y PERMISOS (ACCIONES ESPECÍFICAS) EN `app/Config/AuthGroups.php`:***
+
+```php
+// GRUPOS (EQUIVALENTE A NUESTROS ROLES)
+public array $groups = [
+    'superadmin' => ['title' => 'Super Admin', 'description' => 'Control total'],
+    'admin'      => ['title' => 'Admin', 'description' => 'Administración del día a día'],
+    'editor'     => ['title' => 'Editor', 'description' => 'Editar contenido existente'],
+    'usuario'    => ['title' => 'Usuario', 'description' => 'Acceso básico'],
+];
+
+// PERMISOS (ACCIONES GRANULARES)
+public array $permissions = [
+    'peliculas.crear'    => 'Puede crear películas',
+    'peliculas.editar'   => 'Puede editar películas',
+    'peliculas.eliminar' => 'Puede eliminar películas',
+    'categorias.gestionar' => 'Puede gestionar categorías',
+];
+```
+
+### `FUNCIONES HELPER DE SHIELD`
+
+```php
+// ¿ESTÁ LOGUEADO?
+if (auth()->loggedIn()) { ... }
+
+// OBTENER DATOS DEL USUARIO
+$nombre = auth()->user()->username;
+$email  = auth()->user()->email;
+
+// VERIFICAR GRUPO
+if (auth()->user()->inGroup('admin')) { ... }
+
+// VERIFICAR PERMISO
+if (auth()->user()->can('peliculas.eliminar')) { ... }
+```
+
+---
+
+## `SECCIÓN 22: COMPONENTES AVANZADOS DE CODEIGNITER 4 ⚙️`
+
+> [!NOTE]
+> ***ESTA SECCIÓN ES MAYORMENTE TEÓRICA. EXPLICA COMPONENTES AVANZADOS DEL FRAMEWORK QUE VAN MÁS ALLÁ DEL MVC BÁSICO: ARCHIVO .env, SPARK (CLI), EVENTOS, CACHÉ, ENVÍO DE EMAILS, ENCRIPTACIÓN, ENTORNOS DE EJECUCIÓN Y LOGGING***
+
+### `ARCHIVOS DE REFERENCIA`
+
+| ARCHIVO | QUÉ CONTIENE |
+|---|---|
+| ***`.env`*** | ***VARIABLES DE CONFIGURACIÓN POR ENTORNO (BD, BASE_URL, SESIÓN, ENCRIPTACIÓN). NUNCA SE SUBE A GIT*** |
+| ***`app/Config/Boot/development.php`*** | ***CONFIGURACIÓN PARA DESARROLLO: ERRORES DETALLADOS, DEBUG TOOLBAR*** |
+| ***`app/Config/Boot/production.php`*** | ***CONFIGURACIÓN PARA PRODUCCIÓN: ERRORES GENÉRICOS, SIN DEBUG*** |
+| ***`app/Config/Cache.php`*** | ***CONFIGURACIÓN DEL SISTEMA DE CACHÉ (FILE, REDIS, MEMCACHED)*** |
+| ***`app/Config/Email.php`*** | ***CONFIGURACIÓN SMTP PARA ENVÍO DE EMAILS*** |
+| ***`app/Config/Logger.php`*** | ***CONFIGURACIÓN DEL SISTEMA DE LOGGING (NIVEL, FORMATO, DESTINO)*** |
+
+### `EL ARCHIVO .env`
+
+***EL ARCHIVO `.env` CONTIENE VARIABLES QUE CAMBIAN SEGÚN EL ENTORNO. CODEIGNITER LAS LEE AL ARRANCAR Y SOBREESCRIBE LOS VALORES POR DEFECTO DE `Config/*.php`:***
+
+```env
+# ENTORNO: development (ERRORES DETALLADOS) O production (ERRORES GENÉRICOS)
+CI_ENVIRONMENT = development
+
+# URL BASE DE LA APLICACIÓN
+app.baseURL = 'https://udemy.ddev.site'
+
+# CONEXIÓN A LA BASE DE DATOS
+database.default.hostname = db
+database.default.database = db
+database.default.username = db
+database.default.password = db
+```
+
+### `SPARK: LA LÍNEA DE COMANDOS DE CODEIGNITER`
+
+```bash
+> php spark                          # VER TODOS LOS COMANDOS DISPONIBLES
+> php spark env                      # VER EL ENTORNO ACTUAL (development/production)
+> php spark routes                   # LISTAR TODAS LAS RUTAS REGISTRADAS
+> php spark migrate                  # EJECUTAR MIGRACIONES PENDIENTES
+> php spark cache:clear              # LIMPIAR TODA LA CACHÉ
+> php spark key:generate             # GENERAR CLAVE DE ENCRIPTACIÓN
+> php spark db:table peliculas       # VER ESTRUCTURA DE UNA TABLA
+```
+
+### `SISTEMA DE CACHÉ`
+
+```php
+// INTENTAR LEER DE CACHÉ; SI NO EXISTE, CONSULTAR LA BD Y GUARDAR
+$peliculas = cache('peliculas_listado');
+if ($peliculas === null) {
+    $peliculas = $this->peliculaModel->getPeliculasConCategoria();
+    cache()->save('peliculas_listado', $peliculas, 300); // 300 SEGUNDOS = 5 MINUTOS
+}
+
+// INVALIDAR LA CACHÉ CUANDO SE MODIFICA UN DATO
+cache()->delete('peliculas_listado');
+```
+
+### `ENVÍO DE EMAILS`
+
+```php
+$email = service('email');
+$email->setFrom('tu@email.com', 'CI4 Udemy');
+$email->setTo('destino@email.com');
+$email->setSubject('Nueva película creada');
+$email->setMessage('<h1>Se ha creado una nueva película</h1>');
+$email->send();
+```
+
+### `ENCRIPTACIÓN DE DATOS`
+
+```php
+$encrypter = service('encrypter');
+$datoEncriptado = $encrypter->encrypt('4242-4242-4242-4242');
+$datoOriginal   = $encrypter->decrypt($datoEncriptado);
+```
+
+### `LOGGING (REGISTRO DE EVENTOS)`
+
+```php
+log_message('info', 'Película eliminada: Matrix por usuario: Admin');
+log_message('error', 'Error al conectar con la base de datos');
+log_message('warning', 'Intento de acceso no autorizado desde IP: 192.168.1.100');
+```
+
+---
+
+## `SECCIÓN 23: TRABAJANDO CON LIBRERÍAS 📚`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE EXPLICA QUÉ SON LAS LIBRERÍAS EN CODEIGNITER 4 (TANTO LAS INTEGRADAS COMO LAS PERSONALIZADAS), SE CREA UNA LIBRERÍA PROPIA `PdfGenerator` PARA GENERAR DOCUMENTOS PDF, SE REGISTRA COMO SERVICIO Y SE AÑADE UN ENDPOINT PARA EXPORTAR LA FICHA DE UNA PELÍCULA***
+
+### `ARCHIVOS QUE ENTRAN EN JUEGO`
+
+| ARCHIVO | QUÉ SE HACE |
+|---|---|
+| ***`app/Libraries/PdfGenerator.php`*** | ***SE CREA: LIBRERÍA PERSONALIZADA CON MÉTODOS `setTitulo()`, `setContenido()`, `generar()`, `peliculaPdf()` Y `listadoPeliculasPdf()`. USA METHOD CHAINING (ENCADENAMIENTO DE MÉTODOS). GENERA HTML FORMATEADO QUE PUEDE SER CONVERTIDO A PDF*** |
+| ***`app/Config/Services.php`*** | ***SE MODIFICA: SE REGISTRA LA LIBRERÍA COMO SERVICIO PARA ACCEDER CON `service('pdfGenerator')` EN VEZ DE `new PdfGenerator()`*** |
+| ***`app/Controllers/Pelicula.php`*** | ***SE MODIFICA: SE AÑADE EL MÉTODO `pdf($id)` QUE USA LA LIBRERÍA PARA GENERAR LA FICHA DE UNA PELÍCULA*** |
+| ***`app/Config/Routes.php`*** | ***SE MODIFICA: SE AÑADE LA RUTA `GET /peliculas/pdf/(:num)`*** |
+
+### `LIBRERÍAS INTEGRADAS QUE YA USAMOS`
+
+| LIBRERÍA | DÓNDE SE USA | QUÉ HACE |
+|---|---|---|
+| ***SESSION*** | ***`Auth.php`, `AuthFilter.php`, `layout/main.php`*** | ***GESTIÓN DE SESIONES: `session()->set()`, `session()->get()`, `session()->destroy()`*** |
+| ***VALIDATION*** | ***`TODOS LOS MODELOS`, `Auth.php`, `Pelicula.php`*** | ***VALIDACIÓN DE DATOS: REGLAS EN EL MODELO, `$this->validate()` EN EL CONTROLADOR*** |
+| ***UPLOAD*** | ***`Pelicula.php`*** | ***CARGA DE ARCHIVOS: `$this->request->getFile()`, `$imagen->move()`*** |
+| ***PAGINATION*** | ***`PeliculaModel.php`, `Pelicula.php`*** | ***PAGINACIÓN: `->paginate(5)`, `$pager->links()`*** |
+
+### `LIBRERÍA PdfGenerator`
+
+***ARCHIVO: `app/Libraries/PdfGenerator.php`***
+
+***SE CREA UNA LIBRERÍA PERSONALIZADA QUE ENCAPSULA LA GENERACIÓN DE PDFs. TIENE ESTOS MÉTODOS:***
+
+| MÉTODO | QUÉ HACE |
+|---|---|
+| ***`setTitulo($titulo)`*** | ***ESTABLECE EL TÍTULO DEL DOCUMENTO. RETORNA `$this` PARA ENCADENAR*** |
+| ***`setContenido($html)`*** | ***ESTABLECE EL CONTENIDO HTML. RETORNA `$this` PARA ENCADENAR*** |
+| ***`setOrientacion($orientacion)`*** | ***'portrait' O 'landscape'. RETORNA `$this` PARA ENCADENAR*** |
+| ***`generar()`*** | ***GENERA EL HTML COMPLETO DEL DOCUMENTO CON ESTILOS CSS*** |
+| ***`peliculaPdf($pelicula)`*** | ***GENERA LA FICHA DE UNA PELÍCULA EN FORMATO TABLA HTML*** |
+| ***`listadoPeliculasPdf($peliculas)`*** | ***GENERA UNA TABLA CON EL LISTADO COMPLETO DE PELÍCULAS*** |
+
+### `USO EN EL CONTROLADOR`
+
+```php
+// ACCEDER MEDIANTE SERVICIO
+$pdf = service('pdfGenerator');
+$html = $pdf->peliculaPdf($pelicula);
+
+// O CON METHOD CHAINING
+$html = service('pdfGenerator')
+    ->setTitulo('Mi reporte')
+    ->setContenido('<p>Contenido aquí</p>')
+    ->generar();
+```
+
+### `RUTA DE ACCESO`
+
+```
+https://udemy.ddev.site/peliculas/pdf/5
+```
+
+### `LIBRERÍAS DE TERCEROS (VÍA COMPOSER)`
+
+```bash
+# INSTALAR DOMPDF PARA GENERAR PDFs BINARIOS REALES
+> ddev composer require dompdf/dompdf
+
+# INSTALAR PHPSPREADSHEET PARA GENERAR ARCHIVOS EXCEL
+> ddev composer require phpoffice/phpspreadsheet
+
+# INSTALAR FAKER PARA GENERAR DATOS DE PRUEBA AVANZADOS
+> ddev composer require fakerphp/faker
+```
+
+---
+
+## `SECCIÓN 24: TRABAJANDO CON HELPERS 🔧`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE EXPLICA LA DIFERENCIA ENTRE LIBRERÍAS (CLASES) Y HELPERS (FUNCIONES SUELTAS), SE REPASAN LOS HELPERS QUE YA USAMOS EN EL PROYECTO (URL, FORM, TEXT, SECURITY) Y SE CREA UN HELPER PERSONALIZADO `proyecto_helper.php` CON FUNCIONES UTILITARIAS: `fecha_es()`, `generar_slug()`, `badge_rol()`, `tiempo_relativo()`, `texto_preview()` Y `tamano_archivo()`***
+
+### `ARCHIVOS QUE ENTRAN EN JUEGO`
+
+| ARCHIVO | QUÉ SE HACE |
+|---|---|
+| ***`app/Helpers/proyecto_helper.php`*** | ***SE CREA: HELPER PERSONALIZADO CON 6 FUNCIONES UTILITARIAS. CADA FUNCIÓN VA ENVUELTA EN `if (!function_exists())` PARA PREVENIR ERRORES DE REDECLARACIÓN*** |
+| ***`app/Controllers/BaseController.php`*** | ***SE MODIFICA: SE AÑADE `'proyecto'` AL ARRAY `$helpers` PARA QUE SE CARGUE AUTOMÁTICAMENTE EN TODOS LOS CONTROLADORES*** |
+
+### `DIFERENCIA ENTRE LIBRERÍA Y HELPER`
+
+| CARACTERÍSTICA | LIBRERÍA | HELPER |
+|---|---|---|
+| ***ESTRUCTURA*** | ***CLASE CON MÉTODOS*** | ***FUNCIONES SUELTAS*** |
+| ***ESTADO*** | ***TIENE PROPIEDADES*** | ***SIN ESTADO (STATELESS)*** |
+| ***ACCESO*** | ***`$objeto->metodo()`*** | ***`funcion()`*** |
+| ***EJEMPLO*** | ***`$email->send()`*** | ***`base_url('/ruta')`*** |
+| ***UBICACIÓN*** | ***`app/Libraries/`*** | ***`app/Helpers/`*** |
+| ***CARGA*** | ***`new` / `service()`*** | ***`helper('nombre')`*** |
+
+### `HELPERS QUE YA USAMOS EN EL PROYECTO`
+
+| HELPER | FUNCIONES QUE USAMOS | DÓNDE |
+|---|---|---|
+| ***URL*** | ***`base_url()`, `redirect()`*** | ***TODAS LAS VISTAS Y CONTROLADORES*** |
+| ***FORM*** | ***`csrf_field()`, `old()`*** | ***TODOS LOS FORMULARIOS*** |
+| ***TEXT*** | ***`character_limiter()`*** | ***`peliculas/index.php` (RECORTAR DESCRIPCIÓN)*** |
+| ***SECURITY*** | ***`esc()`*** | ***TODAS LAS VISTAS (PREVENIR XSS)*** |
+
+### `FUNCIONES DEL HELPER PERSONALIZADO`
+
+***ARCHIVO: `app/Helpers/proyecto_helper.php`***
+
+| FUNCIÓN | QUÉ HACE | EJEMPLO |
+|---|---|---|
+| ***`fecha_es($fecha)`*** | ***FORMATEA FECHA EN ESPAÑOL*** | ***`fecha_es('2026-03-16 12:00:00')` → `'16 de Marzo de 2026'`*** |
+| ***`generar_slug($texto)`*** | ***GENERA URL AMIGABLE*** | ***`generar_slug('El Padrino - Parte II')` → `'el-padrino-parte-ii'`*** |
+| ***`badge_rol($rol)`*** | ***GENERA BADGE HTML BOOTSTRAP*** | ***`badge_rol('admin')` → `'<span class="badge bg-success">ADMIN</span>'`*** |
+| ***`tiempo_relativo($fecha)`*** | ***MUESTRA "HACE X TIEMPO"*** | ***`tiempo_relativo('2026-03-24 10:00:00')` → `'Hace 3 horas'`*** |
+| ***`texto_preview($texto, 80)`*** | ***RECORTA TEXTO SIN CORTAR PALABRAS*** | ***`texto_preview('Un niño mexicano...', 30)` → `'Un niño mexicano...'`*** |
+| ***`tamano_archivo(2097152)`*** | ***FORMATEA BYTES A KB/MB/GB*** | ***`tamano_archivo(2097152)` → `'2 MB'`*** |
+
+### `CÓMO SE CARGAN LOS HELPERS`
+
+```php
+// OPCIÓN A: EN EL BASECONTROLLER (PARA TODOS LOS CONTROLADORES)
+// ARCHIVO: app/Controllers/BaseController.php
+protected $helpers = ['url', 'form', 'proyecto'];
+
+// OPCIÓN B: EN UN CONTROLADOR ESPECÍFICO
+helper('proyecto');
+
+// OPCIÓN C: EN Config/Autoload.php (EN TODA LA APLICACIÓN)
+public $helpers = ['url', 'form', 'proyecto'];
+```
+
+---
+
+## `SECCIÓN 25: SISTEMA CRUD AUTOMATIZADO 🤖`
+
+> [!NOTE]
+> ***EN ESTA SECCIÓN SE ANALIZA EL PATRÓN REPETITIVO QUE SIGUEN LOS 3 CRUDS DEL PROYECTO (PELÍCULAS, CATEGORÍAS, ETIQUETAS) Y SE CREA UN SISTEMA PARA AUTOMATIZAR LA CREACIÓN DE NUEVOS CRUDS. SE IMPLEMENTA UN CONTROLADOR BASE ABSTRACTO (`CrudController`) CON TODA LA LÓGICA CRUD, UNA FUNCIÓN HELPER PARA REGISTRAR RUTAS AUTOMÁTICAMENTE Y UN COMANDO SPARK PERSONALIZADO PARA GENERAR LOS ARCHIVOS DEL ESQUELETO***
+
+### `ARCHIVOS QUE ENTRAN EN JUEGO`
+
+| ARCHIVO | QUÉ SE HACE |
+|---|---|
+| ***`app/Controllers/CrudController.php`*** | ***SE CREA: CONTROLADOR BASE ABSTRACTO CON LOS 6 MÉTODOS CRUD (INDEX, CREATE, STORE, EDIT, UPDATE, DELETE) Y 6 MÉTODOS HOOK (datosExtraFormulario, antesDeGuardar, despuesDeGuardar, antesDeActualizar, despuesDeActualizar, antesDeEliminar) QUE LOS HIJOS SOBREESCRIBEN PARA PERSONALIZAR*** |
+| ***`app/Commands/GenerarCrud.php`*** | ***SE CREA: COMANDO SPARK PERSONALIZADO (`php spark crud:generar NombreEntidad`) QUE GENERA AUTOMÁTICAMENTE EL CONTROLADOR Y LAS 3 VISTAS (INDEX, CREATE, EDIT) CON BOOTSTRAP*** |
+| ***`app/Config/Routes.php`*** | ***SE MODIFICA: SE AÑADE LA FUNCIÓN `registrarCrud()` QUE GENERA LAS 6 RUTAS CRUD EN 1 LÍNEA. LAS 18 RUTAS MANUALES SE REEMPLAZAN POR 3 LÍNEAS*** |
+
+### `EL PROBLEMA: CÓDIGO REPETITIVO`
+
+***LOS 3 CONTROLADORES CRUD (Pelicula, Categoria, Etiqueta) SIGUEN EXACTAMENTE EL MISMO PATRÓN:***
+
+```
+ANTES: ~100 LÍNEAS POR CONTROLADOR × 3 ENTIDADES = ~300 LÍNEAS REPETITIVAS
+AHORA: ~15 LÍNEAS POR CONTROLADOR × 3 ENTIDADES = ~45 LÍNEAS
+```
+
+### `LA SOLUCIÓN: CrudController ABSTRACTO`
+
+***EL CONTROLADOR BASE CONTIENE TODA LA LÓGICA. LOS HIJOS SOLO DEFINEN CONFIGURACIÓN:***
+
+```php
+// EJEMPLO: CRUD DE CATEGORÍAS EN SOLO 12 LÍNEAS
+class Categoria extends CrudController
+{
+    protected string $modelClass     = 'App\Models\CategoriaModel';
+    protected string $vistasPrefijo  = 'categorias';
+    protected string $rutaBase       = '/categorias';
+    protected string $tituloSingular = 'Categoría';
+    protected string $tituloPlural   = 'Categorías';
+    protected string $variableLista  = 'categorias';
+    protected string $variableItem   = 'categoria';
+    protected array  $campos         = ['titulo'];
+    protected int    $porPagina      = 10;
+}
+```
+
+### `PROPIEDADES DEL CrudController`
+
+| PROPIEDAD | TIPO | DESCRIPCIÓN | EJEMPLO |
+|---|---|---|---|
+| ***`$modelClass`*** | ***string*** | ***CLASE DEL MODELO CON NAMESPACE*** | ***`'App\Models\CategoriaModel'`*** |
+| ***`$vistasPrefijo`*** | ***string*** | ***CARPETA DE VISTAS*** | ***`'categorias'`*** |
+| ***`$rutaBase`*** | ***string*** | ***URL PARA REDIRECCIONES*** | ***`'/categorias'`*** |
+| ***`$tituloSingular`*** | ***string*** | ***NOMBRE PARA MENSAJES*** | ***`'Categoría'`*** |
+| ***`$tituloPlural`*** | ***string*** | ***NOMBRE PARA EL LISTADO*** | ***`'Categorías'`*** |
+| ***`$variableLista`*** | ***string*** | ***VARIABLE EN VISTA INDEX*** | ***`'categorias'`*** |
+| ***`$variableItem`*** | ***string*** | ***VARIABLE EN VISTA EDIT*** | ***`'categoria'`*** |
+| ***`$campos`*** | ***array*** | ***CAMPOS DEL FORMULARIO*** | ***`['titulo']`*** |
+| ***`$porPagina`*** | ***int*** | ***REGISTROS POR PÁGINA*** | ***`10` (0 = SIN PAGINACIÓN)*** |
+
+### `MÉTODOS HOOK (PERSONALIZACIÓN)`
+
+***LOS HOOKS SON MÉTODOS VACÍOS QUE LOS CONTROLADORES HIJOS SOBREESCRIBEN CUANDO NECESITAN COMPORTAMIENTO ESPECIAL:***
+
+| HOOK | CUÁNDO SE EJECUTA | EJEMPLO DE USO |
+|---|---|---|
+| ***`datosExtraFormulario()`*** | ***EN CREATE() Y EDIT()*** | ***PASAR LISTA DE CATEGORÍAS PARA EL SELECT*** |
+| ***`antesDeGuardar()`*** | ***EN STORE(), ANTES DE SAVE()*** | ***PROCESAR Y SUBIR IMAGEN*** |
+| ***`despuesDeGuardar()`*** | ***EN STORE(), DESPUÉS DE SAVE()*** | ***SINCRONIZAR ETIQUETAS EN TABLA PIVOTE*** |
+| ***`antesDeActualizar()`*** | ***EN UPDATE(), ANTES DE UPDATE()*** | ***PROCESAR NUEVA IMAGEN, BORRAR LA ANTERIOR*** |
+| ***`despuesDeActualizar()`*** | ***EN UPDATE(), DESPUÉS DE UPDATE()*** | ***SINCRONIZAR ETIQUETAS*** |
+| ***`antesDeEliminar()`*** | ***EN DELETE(), ANTES DE DELETE()*** | ***BORRAR IMAGEN DEL SERVIDOR, BORRAR PIVOTE*** |
+
+### `FUNCIÓN registrarCrud()`
+
+***ARCHIVO: `app/Config/Routes.php`***
+
+```php
+// ANTES: 18 LÍNEAS DE RUTAS MANUALES (6 POR ENTIDAD × 3 ENTIDADES)
+$routes->get('/categorias', 'Categoria::index');
+$routes->get('/categorias/create', 'Categoria::create');
+// ... 4 líneas más por entidad ...
+
+// AHORA: 3 LÍNEAS CON registrarCrud()
+registrarCrud($routes, 'peliculas', 'Pelicula');
+registrarCrud($routes, 'categorias', 'Categoria');
+registrarCrud($routes, 'etiquetas', 'Etiqueta');
+```
+
+### `COMANDO php spark crud:generar`
+
+***ARCHIVO: `app/Commands/GenerarCrud.php`***
+
+```bash
+# GENERAR UN CRUD COMPLETO PARA UNA NUEVA ENTIDAD "Producto"
+> ddev exec php spark crud:generar Producto
+
+# GENERA AUTOMÁTICAMENTE:
+#   ✓ app/Controllers/Producto.php (HEREDA DE CrudController)
+#   ✓ app/Views/productos/index.php (TABLA BOOTSTRAP CON PAGINACIÓN)
+#   ✓ app/Views/productos/create.php (FORMULARIO DE CREACIÓN)
+#   ✓ app/Views/productos/edit.php (FORMULARIO DE EDICIÓN)
+```
+
+### `FLUJO PARA AÑADIR UNA NUEVA ENTIDAD`
+
+```bash
+# 1. GENERAR EL ESQUELETO (1 SEGUNDO)
+> ddev exec php spark crud:generar Producto
+
+# 2. CREAR LA MIGRACIÓN
+> ddev exec php spark make:migration Productos
+
+# 3. CREAR EL MODELO
+> ddev exec php spark make:model ProductoModel
+
+# 4. COMPLETAR LOS CAMPOS EN EL CONTROLADOR GENERADO
+# 5. COMPLETAR LOS INPUTS EN LAS VISTAS GENERADAS
+
+# 6. AÑADIR LA RUTA EN Routes.php:
+registrarCrud($routes, 'productos', 'Producto');
+
+# 7. EJECUTAR LA MIGRACIÓN
+> ddev exec php spark migrate
+```
+
+
+---
+
 ## `URLS DE ACCESO 🌐`
 
 | URL | DESCRIPCIÓN |
@@ -1168,6 +1692,9 @@ https://udemy.ddev.site/etiquetas?busqueda=clasico
 | ***https://udemy.ddev.site/etiquetas*** | ***CRUD DE ETIQUETAS (REQUIERE LOGIN)*** |
 | ***https://udemy.ddev.site/api/peliculas*** | ***API REST PELÍCULAS (JSON)*** |
 | ***https://udemy.ddev.site/api/categorias*** | ***API REST CATEGORÍAS (JSON)*** |
+| ***https://udemy.ddev.site/peliculas/pdf/5*** | ***PDF DE PELÍCULA (SECCIÓN 23)*** |
+| ***https://udemy.ddev.site/api/peliculas?busqueda=matrix*** | ***API CON FILTROS (SECCIÓN 19)*** |
+| ***https://udemy.ddev.site/api/peliculas?page=2&per_page=20*** | ***API CON PAGINACIÓN (SECCIÓN 19)*** |
 
 ---
 
@@ -1186,6 +1713,12 @@ https://udemy.ddev.site/etiquetas?busqueda=clasico
 | ***16*** | ***CARGA DE ARCHIVOS: SUBIDA DE IMÁGENES CON VALIDACIÓN, NOMBRES ALEATORIOS Y ELIMINACIÓN*** |
 | ***17*** | ***INTEGRACIÓN: API CON ETIQUETAS, NAVBAR AMPLIADA, FILTRO AUTH EN ETIQUETAS*** |
 | ***18*** | ***LISTADO PAGINADO Y FILTROS: PAGINACIÓN EN TODOS LOS LISTADOS, BÚSQUEDA POR TEXTO, FILTRO POR CATEGORÍA/ETIQUETA, LIKE AGRUPADO CON groupStart()/groupEnd()*** |
+| ***19*** | ***REST API AVANZADA: PAGINACIÓN EN API, FILTROS/BÚSQUEDA, UPLOAD DE IMÁGENES, ASIGNACIÓN DE ETIQUETAS, FILTRO ApiAuthFilter*** |
+| ***20-21*** | ***CODEIGNITER SHIELD (TEÓRICO): AUTENTICACIÓN OFICIAL, GRUPOS, PERMISOS, TOKENS, COMPARACIÓN CON SISTEMA MANUAL*** |
+| ***22*** | ***COMPONENTES AVANZADOS (TEÓRICO): .env, SPARK, EVENTOS, CACHÉ, EMAILS, ENCRIPTACIÓN, ENTORNOS, LOGGING*** |
+| ***23*** | ***LIBRERÍAS: LIBRERÍA PERSONALIZADA PdfGenerator, REGISTRO COMO SERVICIO, ENDPOINT PDF, LIBRERÍAS DE TERCEROS*** |
+| ***24*** | ***HELPERS: HELPER PERSONALIZADO proyecto_helper.php CON fecha_es(), generar_slug(), badge_rol(), tiempo_relativo()*** |
+| ***25*** | ***CRUD AUTOMATIZADO: CrudController ABSTRACTO, HOOKS, registrarCrud(), COMANDO php spark crud:generar*** |
 
 ---
 

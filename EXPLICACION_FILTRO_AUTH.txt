@@ -1,0 +1,222 @@
+================================================================================
+  CÓMO FUNCIONA EL FILTRO AUTH EN CODEIGNITER 4 - PROYECTO UDEMY
+================================================================================
+
+  Este documento explica paso a paso cómo se conectan los ficheros
+  relacionados con el sistema de autenticación por filtros.
+
+================================================================================
+  1. VISIÓN GENERAL - ¿QUÉ ES UN FILTRO?
+================================================================================
+
+  Un filtro es código que se ejecuta ANTES o DESPUÉS de que un controlador
+  procese una petición HTTP. Piensa en él como un "portero" que decide si
+  dejas pasar al usuario o lo redirige a otra parte.
+
+  En este proyecto hay 2 filtros personalizados:
+    - AuthFilter  → Verifica que el usuario haya iniciado sesión.
+    - AdminFilter → Verifica que el usuario tenga rol "admin".
+
+================================================================================
+  2. LOS FICHEROS INVOLUCRADOS Y SU CONEXIÓN
+================================================================================
+
+  Estos son los 4 ficheros clave y el orden en que se relacionan:
+
+  ┌─────────────────────────────────┐
+  │  app/Config/Filters.php         │  ← (A) Registro y configuración
+  └──────────────┬──────────────────┘
+                 │ referencia a
+                 ▼
+  ┌─────────────────────────────────┐
+  │  app/Filters/AuthFilter.php     │  ← (B) Lógica del filtro auth
+  │  app/Filters/AdminFilter.php    │  ← (B) Lógica del filtro admin
+  └──────────────┬──────────────────┘
+                 │ usa datos de sesión creados por
+                 ▼
+  ┌─────────────────────────────────┐
+  │  app/Controllers/Auth.php       │  ← (C) Controlador de login/registro
+  └──────────────┬──────────────────┘
+                 │ las rutas que apuntan aquí están en
+                 ▼
+  ┌─────────────────────────────────┐
+  │  app/Config/Routes.php          │  ← (D) Definición de rutas
+  └─────────────────────────────────┘
+
+================================================================================
+  3. PASO A PASO: ¿QUÉ OCURRE CUANDO UN USUARIO VISITA /peliculas?
+================================================================================
+
+  PASO 1 - El usuario escribe en el navegador: https://tu-sitio.com/peliculas
+
+  PASO 2 - CodeIgniter busca la ruta en Routes.php:
+           $routes->get('/peliculas', 'Pelicula::index');
+           → Sabe que debe ir al controlador Pelicula, método index.
+
+  PASO 3 - ANTES de ejecutar el controlador, CodeIgniter revisa Filters.php
+           para ver si hay algún filtro que aplique a la ruta "peliculas".
+
+           En Config/Filters.php, en la propiedad $filters:
+
+              'auth' => ['before' => [
+                  'peliculas',
+                  'peliculas/*',
+                  'categorias',
+                  'categorias/*',
+                  'etiquetas',
+                  'etiquetas/*',
+              ]],
+
+           → La ruta "peliculas" coincide con el patrón, así que se ejecuta
+             el filtro con alias 'auth' ANTES del controlador.
+
+  PASO 4 - CodeIgniter busca qué clase corresponde al alias 'auth'.
+           En Config/Filters.php, en la propiedad $aliases:
+
+              'auth' => AuthFilter::class,
+
+           → El alias 'auth' apunta a App\Filters\AuthFilter.
+
+  PASO 5 - Se ejecuta el método before() de AuthFilter.php:
+
+              public function before(RequestInterface $request, $arguments = null)
+              {
+                  if (!session()->get('logueado')) {
+                      return redirect()->to(base_url('/auth/login'))
+                          ->with('error', 'DEBES INICIAR SESIÓN...');
+                  }
+              }
+
+           → Comprueba si en la sesión existe la variable 'logueado' = true.
+
+           SI NO ESTÁ LOGUEADO:
+              - Redirige a /auth/login con un mensaje de error.
+              - El controlador Pelicula::index NUNCA se ejecuta.
+
+           SI ESTÁ LOGUEADO:
+              - El método before() no devuelve nada (return implícito null).
+              - CodeIgniter entiende que "todo OK" y continúa al controlador.
+              - Se ejecuta Pelicula::index() normalmente.
+
+================================================================================
+  4. ¿CÓMO SE CREA LA VARIABLE DE SESIÓN 'logueado'?
+================================================================================
+
+  En el controlador Auth.php, método loginPost():
+
+  Cuando el usuario envía el formulario de login correctamente:
+
+      session()->set([
+          'usuario_id'     => $usuario['id'],
+          'usuario_nombre' => $usuario['nombre'],
+          'usuario_email'  => $usuario['email'],
+          'usuario_rol'    => $usuario['rol'],
+          'logueado'       => true,            ← ESTA ES LA CLAVE
+      ]);
+
+  → Se guardan datos en la sesión de PHP. A partir de aquí,
+    session()->get('logueado') devuelve true, y el filtro
+    AuthFilter deja pasar al usuario.
+
+  Cuando el usuario hace logout (Auth::logout):
+
+      session()->destroy();
+
+  → Se destruye la sesión completa. La variable 'logueado' deja de existir,
+    y el filtro AuthFilter bloqueará el acceso de nuevo.
+
+================================================================================
+  5. RESUMEN DE LA CONEXIÓN ENTRE FICHEROS
+================================================================================
+
+  Config/Filters.php tiene DOS trabajos:
+    ┌────────────────────────────────────────────────────────────────────┐
+    │ 1) $aliases → Asocia un nombre corto con una clase PHP:           │
+    │                                                                    │
+    │    'auth'  => AuthFilter::class                                    │
+    │    'admin' => AdminFilter::class                                   │
+    │                                                                    │
+    │ 2) $filters → Define A QUÉ RUTAS se aplica cada filtro:           │
+    │                                                                    │
+    │    'auth' => ['before' => ['peliculas', 'peliculas/*', ...]]       │
+    │                                                                    │
+    │    Esto dice: "antes de acceder a cualquier ruta que empiece       │
+    │    por peliculas, categorias o etiquetas, ejecuta el filtro auth"  │
+    └────────────────────────────────────────────────────────────────────┘
+
+  Filters/AuthFilter.php tiene UN trabajo:
+    ┌────────────────────────────────────────────────────────────────────┐
+    │ Comprobar session()->get('logueado'):                              │
+    │   - Si es false/null → redirigir a /auth/login (BLOQUEAR)         │
+    │   - Si es true       → no hacer nada (DEJAR PASAR)                │
+    └────────────────────────────────────────────────────────────────────┘
+
+  Controllers/Auth.php tiene UN trabajo:
+    ┌────────────────────────────────────────────────────────────────────┐
+    │ Crear/destruir la sesión:                                          │
+    │   - loginPost()  → session()->set(['logueado' => true, ...])      │
+    │   - logout()     → session()->destroy()                            │
+    └────────────────────────────────────────────────────────────────────┘
+
+  Config/Routes.php:
+    ┌────────────────────────────────────────────────────────────────────┐
+    │ Define las URLs disponibles. NO aplica filtros directamente,       │
+    │ eso lo hace Config/Filters.php con los patrones de URI.            │
+    │                                                                    │
+    │ NOTA: También se pueden aplicar filtros directamente en las rutas: │
+    │   $routes->get('peliculas', 'Pelicula::index', ['filter'=>'auth'])│
+    │ Pero en este proyecto se hace desde Config/Filters.php.            │
+    └────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+  6. EL FILTRO ADMIN (BONUS)
+================================================================================
+
+  Funciona igual que AuthFilter pero comprueba el ROL:
+
+      if (session()->get('usuario_rol') !== 'admin') {
+          return redirect()->to(base_url('/peliculas'))
+              ->with('error', 'NO TIENES PERMISOS DE ADMINISTRADOR...');
+      }
+
+  Actualmente NO está asignado a ninguna ruta en $filters de Config/Filters.php.
+  Para usarlo, tendrías que añadir algo como:
+
+      'admin' => ['before' => [
+          'categorias/create',
+          'categorias/store',
+          // etc.
+      ]],
+
+  O aplicarlo directamente en una ruta:
+
+      $routes->get('categorias/create', 'Categoria::create', ['filter' => 'admin']);
+
+================================================================================
+  7. FLUJO VISUAL COMPLETO
+================================================================================
+
+  Usuario escribe URL
+        │
+        ▼
+  Routes.php → ¿Existe la ruta? ─── No ──→ Error 404
+        │
+       Sí
+        │
+        ▼
+  Filters.php → ¿Hay filtro para esta ruta? ─── No ──→ Ejecutar controlador
+        │
+       Sí (alias 'auth')
+        │
+        ▼
+  AuthFilter.php → before() → ¿session('logueado') es true?
+        │                              │
+       No                             Sí
+        │                              │
+        ▼                              ▼
+  Redirect a /auth/login      Ejecutar controlador
+                               (Pelicula::index, etc.)
+
+================================================================================
+  Generado automáticamente para referencia del proyecto.
+================================================================================

@@ -18,6 +18,8 @@ use CodeIgniter\Filters\SecureHeaders;
 // IMPORTAMOS NUESTROS FILTROS PERSONALIZADOS
 use App\Filters\AuthFilter;
 use App\Filters\AdminFilter;
+// IMPORTAMOS EL FILTRO DE AUTENTICACIÓN PARA LA API REST (SECCIÓN 19)
+use App\Filters\ApiAuthFilter;
 
 // CLASE DE CONFIGURACIÓN DE FILTROS DE LA APLICACIÓN
 class Filters extends BaseFilters

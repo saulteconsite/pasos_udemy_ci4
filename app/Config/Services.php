@@ -1,32 +1,38 @@
 <?php
 
+// ESPACIO DE NOMBRES PARA LOS ARCHIVOS DE CONFIGURACIÓN
 namespace Config;
 
+// IMPORTAMOS LA CLASE BASE DE SERVICIOS DE CODEIGNITER
 use CodeIgniter\Config\BaseService;
 
-/**
- * Services Configuration file.
- *
- * Services are simply other classes/libraries that the system uses
- * to do its job. This is used by CodeIgniter to allow the core of the
- * framework to be swapped out easily without affecting the usage within
- * the rest of your application.
- *
- * This file holds any application-specific services, or service overrides
- * that you might need. An example has been included with the general
- * method format you should use for your service methods. For more examples,
- * see the core Services file at system/Config/Services.php.
- */
+// IMPORTAMOS NUESTRA LIBRERÍA PERSONALIZADA PDF GENERATOR
+use App\Libraries\PdfGenerator;
+
+// ARCHIVO DE CONFIGURACIÓN DE SERVICIOS
+// LOS SERVICIOS SON INSTANCIAS DE CLASES GESTIONADAS POR EL FRAMEWORK
+// EL CONTENEDOR DE SERVICIOS SE ENCARGA DE:
+// - CREAR LA INSTANCIA SOLO CUANDO SE NECESITA (LAZY LOADING)
+// - REUTILIZAR LA MISMA INSTANCIA (SINGLETON) PARA AHORRAR MEMORIA
+// - PERMITIR REEMPLAZAR IMPLEMENTACIONES FÁCILMENTE (PARA TESTING)
 class Services extends BaseService
 {
-    /*
-     * public static function example($getShared = true)
-     * {
-     *     if ($getShared) {
-     *         return static::getSharedInstance('example');
-     *     }
-     *
-     *     return new \CodeIgniter\Example();
-     * }
-     */
+    // =============================================
+    // SECCIÓN 23: SERVICIO PARA LA LIBRERÍA PDF GENERATOR
+    // =============================================
+    // REGISTRAMOS NUESTRA LIBRERÍA COMO SERVICIO PARA PODER ACCEDER CON:
+    // $pdf = service('pdfGenerator');
+    // EN VEZ DE: $pdf = new \App\Libraries\PdfGenerator();
+    // LA VENTAJA ES QUE service() DEVUELVE SINGLETON (MISMA INSTANCIA SIEMPRE)
+    public static function pdfGenerator(bool $getShared = true)
+    {
+        // SI SE PIDE LA INSTANCIA COMPARTIDA (POR DEFECTO), DEVOLVEMOS EL SINGLETON
+        // getSharedInstance() BUSCA SI YA EXISTE UNA INSTANCIA; SI NO, LA CREA
+        if ($getShared) {
+            return static::getSharedInstance('pdfGenerator');
+        }
+
+        // SI SE PIDE UNA INSTANCIA NUEVA ($getShared = false), CREAMOS UNA NUEVA
+        return new PdfGenerator();
+    }
 }

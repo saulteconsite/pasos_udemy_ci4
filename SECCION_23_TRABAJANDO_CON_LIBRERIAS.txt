@@ -1,0 +1,533 @@
+================================================================================
+  SECCIÓN 23: TRABAJANDO CON LIBRERÍAS EN CODEIGNITER 4
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ ES UNA LIBRERÍA EN CODEIGNITER?
+████████████████████████████████████████████████████████████████████████████████
+
+  Una LIBRERÍA es una clase PHP que encapsula funcionalidad reutilizable.
+  En vez de repetir código, lo agrupas en una librería y la usas donde
+  la necesites.
+
+  CodeIgniter tiene 2 tipos de librerías:
+
+  1. LIBRERÍAS INTEGRADAS (del framework):
+     Ya vienen con CodeIgniter, listas para usar.
+     Ejemplos: Session, Email, Validation, Upload, Image, Pagination...
+
+  2. LIBRERÍAS PERSONALIZADAS (las que tú creas):
+     Clases que TÚ escribes para tu proyecto.
+     Se guardan en: app/Libraries/
+     Ejemplo: Podríamos crear una librería para generar PDFs,
+              procesar pagos, enviar notificaciones, etc.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: LIBRERÍAS INTEGRADAS QUE YA USAMOS EN EL PROYECTO
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  1.1 SESSION (SESIONES)
+================================================================================
+
+  YA LA USAMOS en nuestro proyecto para el login:
+
+  DÓNDE SE USA EN EL PROYECTO:
+    - app/Controllers/Auth.php → session()->set(), session()->destroy()
+    - app/Filters/AuthFilter.php → session()->get('logueado')
+    - app/Views/layout/main.php → session()->getFlashdata()
+
+  CÓMO SE ACCEDE:
+
+    // Opción 1: Función helper (la más común)
+    session()->set('clave', 'valor');
+    session()->get('clave');
+
+    // Opción 2: Servicio
+    $session = service('session');
+    $session->set('clave', 'valor');
+
+    // Opción 3: En controladores (inyectada en $this->request)
+    $this->request->getSession()->get('clave');
+
+  MÉTODOS PRINCIPALES:
+  ──────────────────
+    session()->set('clave', 'valor')     → Guardar dato permanente
+    session()->set([array de datos])      → Guardar múltiples datos
+    session()->get('clave')               → Leer dato
+    session()->remove('clave')            → Eliminar dato específico
+    session()->destroy()                  → Destruir toda la sesión
+    session()->setFlashdata('msg', 'ok')  → Dato que dura 1 petición
+    session()->getFlashdata('msg')        → Leer flashdata
+    session()->has('clave')               → ¿Existe esta clave?
+
+  EJEMPLO EN AUTH.PHP DE NUESTRO PROYECTO:
+
+    // Al hacer login exitoso, guardamos datos en sesión:
+    session()->set([
+        'usuario_id'     => $usuario['id'],
+        'usuario_nombre' => $usuario['nombre'],
+        'usuario_email'  => $usuario['email'],
+        'usuario_rol'    => $usuario['rol'],
+        'logueado'       => true,
+    ]);
+
+    // Al hacer logout:
+    session()->destroy();
+
+
+================================================================================
+  1.2 VALIDATION (VALIDACIONES)
+================================================================================
+
+  YA LA USAMOS para validar formularios y modelos.
+
+  DÓNDE SE USA EN EL PROYECTO:
+    - app/Controllers/Auth.php → $this->validate($reglas)
+    - app/Controllers/Pelicula.php → $this->validate($reglas) para imágenes
+    - app/Models/*.php → $validationRules en cada modelo
+
+  2 FORMAS DE VALIDAR:
+
+  FORMA A: En el controlador (validación manual):
+
+    $reglas = [
+        'email'    => 'required|valid_email',
+        'password' => 'required|min_length[6]',
+    ];
+    $mensajes = [
+        'email' => ['required' => 'EL EMAIL ES OBLIGATORIO'],
+    ];
+
+    if (!$this->validate($reglas, $mensajes)) {
+        $errores = $this->validator->getErrors();
+        // $errores = ['email' => 'EL EMAIL ES OBLIGATORIO']
+    }
+
+  FORMA B: En el modelo (validación automática):
+
+    // En PeliculaModel.php:
+    protected $validationRules = [
+        'titulo' => 'required|min_length[3]|max_length[150]',
+    ];
+
+    // Cuando llamamos $this->model->save($datos), si falla:
+    if (!$this->peliculaModel->save($datos)) {
+        $errores = $this->peliculaModel->errors();
+    }
+
+  REGLAS DE VALIDACIÓN MÁS USADAS:
+  ────────────────────────────────
+    required           → Campo obligatorio
+    min_length[3]      → Mínimo 3 caracteres
+    max_length[150]    → Máximo 150 caracteres
+    valid_email        → Formato de email válido
+    is_unique[tabla.campo,id,{id}] → Único en la BD (excluye el propio ID al editar)
+    matches[campo]     → Debe coincidir con otro campo (ej: confirmar contraseña)
+    is_natural_no_zero → Número entero positivo (mayor que 0)
+    permit_empty       → El campo puede estar vacío (se salta las demás reglas)
+    uploaded[campo]    → Se ha subido un archivo
+    max_size[campo,2048] → Tamaño máximo en KB
+    is_image[campo]    → El archivo es una imagen
+    mime_in[campo,...] → Tipos MIME permitidos
+    numeric            → Solo números
+    alpha_numeric      → Solo letras y números
+    regex_match[/patrón/] → Expresión regular personalizada
+
+
+================================================================================
+  1.3 UPLOAD (CARGA DE ARCHIVOS)
+================================================================================
+
+  YA LA USAMOS para subir imágenes de películas.
+
+  DÓNDE SE USA EN EL PROYECTO:
+    - app/Controllers/Pelicula.php → store() y update()
+
+  MÉTODOS CLAVE:
+
+    // Obtener el archivo del formulario
+    $archivo = $this->request->getFile('nombre_campo');
+
+    // Verificar que es válido
+    $archivo->isValid()        // ¿Se subió correctamente?
+    $archivo->hasMoved()       // ¿Ya fue movido? (evita mover 2 veces)
+
+    // Información del archivo
+    $archivo->getName()        // Nombre original: "foto.jpg"
+    $archivo->getRandomName()  // Nombre aleatorio: "1710234567_abc.jpg"
+    $archivo->getSize()        // Tamaño en bytes: 245760
+    $archivo->getMimeType()    // Tipo: "image/jpeg"
+    $archivo->getExtension()   // Extensión: "jpg"
+    $archivo->getTempName()    // Ruta temporal: "/tmp/phpXXXXXX"
+
+    // Mover el archivo a su destino final
+    $archivo->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
+
+  EJEMPLO COMPLETO DE NUESTRO PROYECTO:
+
+    $imagen = $this->request->getFile('imagen');
+
+    if ($imagen && $imagen->isValid() && !$imagen->hasMoved()) {
+        // Validar tipo y tamaño
+        $reglas = [
+            'imagen' => 'uploaded[imagen]|max_size[imagen,2048]'
+                      . '|is_image[imagen]'
+                      . '|mime_in[imagen,image/jpg,image/jpeg,image/png,image/gif]',
+        ];
+
+        if (!$this->validate($reglas)) {
+            return redirect()->back()->withInput()
+                             ->with('errors', $this->validator->getErrors());
+        }
+
+        // Generar nombre aleatorio y mover
+        $nuevoNombre = $imagen->getRandomName();
+        $imagen->move(FCPATH . 'uploads/peliculas', $nuevoNombre);
+
+        // Guardar solo el nombre en la BD (no la ruta completa)
+        $datos['imagen'] = $nuevoNombre;
+    }
+
+
+================================================================================
+  1.4 PAGINATION (PAGINACIÓN)
+================================================================================
+
+  YA LA USAMOS en el listado de películas y etiquetas.
+
+  DÓNDE SE USA EN EL PROYECTO:
+    - app/Models/PeliculaModel.php → paginate(5)
+    - app/Controllers/Pelicula.php → $this->peliculaModel->pager
+    - app/Views/peliculas/index.php → $pager->links()
+
+  CÓMO FUNCIONA:
+
+    // En el modelo/controlador:
+    $peliculas = $this->peliculaModel->paginate(5);  // 5 por página
+    $pager = $this->peliculaModel->pager;
+
+    // En la vista:
+    <?= $pager->links('default', 'default_full') ?>
+
+  paginate(5) hace dos cosas:
+    1. Cuenta el total de registros (SELECT COUNT(*))
+    2. Trae solo 5 registros con LIMIT y OFFSET según la página actual
+       (la página se lee automáticamente del query string ?page=2)
+
+
+================================================================================
+  1.5 IMAGE (MANIPULACIÓN DE IMÁGENES)
+================================================================================
+
+  NO la usamos aún, pero es muy útil para crear miniaturas.
+
+  EJEMPLO: Crear miniatura de 200x200 al subir una imagen:
+
+    $image = service('image');
+
+    $image->withFile(FCPATH . 'uploads/peliculas/' . $nuevoNombre)
+          ->fit(200, 200)  // Redimensionar a 200x200 manteniendo proporción
+          ->save(FCPATH . 'uploads/peliculas/thumbs/' . $nuevoNombre);
+
+  OTROS MÉTODOS:
+    ->resize(800, 600)              → Redimensionar
+    ->fit(200, 200)                 → Recortar para ajustar
+    ->crop(100, 100, 50, 50)        → Recortar zona específica
+    ->rotate(90)                    → Rotar
+    ->text('Marca de agua')         → Añadir texto
+    ->flatten()                     → Quitar transparencia (PNG → JPG)
+    ->convert(IMAGETYPE_WEBP)       → Convertir formato
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: CÓMO ACCEDER A LAS LIBRERÍAS (SERVICIO VS HELPER)
+████████████████████████████████████████████████████████████████████████████████
+
+  En CodeIgniter hay 3 formas de acceder a una librería:
+
+  1. FUNCIÓN service() (Contenedor de servicios):
+     ─────────────────────────────────────────────
+       $email     = service('email');
+       $encrypter = service('encrypter');
+       $session   = service('session');
+       $image     = service('image');
+
+     service() devuelve la MISMA instancia cada vez (singleton).
+     Si necesitas una instancia NUEVA, usa:
+       $email = service('email', false);  // false = nueva instancia
+
+  2. FUNCIÓN model() (para modelos):
+     ──────────────────────────────
+       $peliculaModel = model('PeliculaModel');
+       // Equivale a: new \App\Models\PeliculaModel();
+       // Pero model() devuelve singleton (reutiliza la instancia)
+
+  3. FUNCIÓN helper() (para cargar helpers):
+     ─────────────────────────────────────
+       helper('form');     // Carga funciones de formulario
+       helper('url');      // Carga funciones de URL
+       helper('text');     // Carga funciones de texto
+       helper(['form', 'url', 'text']); // Cargar varios a la vez
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: CREAR UNA LIBRERÍA PERSONALIZADA
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  3.1 ESTRUCTURA BÁSICA
+================================================================================
+
+  Las librerías personalizadas se guardan en:
+
+    app/Libraries/
+
+  EJEMPLO: Crear una librería para generar PDFs de las películas.
+
+  ARCHIVO: app/Libraries/PdfGenerator.php
+  ──────────────────────────────────────
+
+    <?php
+    namespace App\Libraries;
+
+    class PdfGenerator
+    {
+        protected $titulo;
+        protected $contenido;
+        protected $orientacion = 'portrait';  // portrait o landscape
+
+        // Método para establecer el título del PDF
+        public function setTitulo(string $titulo): self
+        {
+            $this->titulo = $titulo;
+            return $this;  // Retorna $this para permitir "method chaining"
+        }
+
+        // Método para establecer el contenido
+        public function setContenido(string $contenido): self
+        {
+            $this->contenido = $contenido;
+            return $this;
+        }
+
+        // Método para establecer orientación
+        public function setOrientacion(string $orientacion): self
+        {
+            $this->orientacion = $orientacion;
+            return $this;
+        }
+
+        // Método para generar y descargar el PDF
+        public function generar(): string
+        {
+            // Aquí iría la lógica de generación con DOMPDF, TCPDF, etc.
+            // Por ahora, un ejemplo simplificado:
+
+            $html = '<!DOCTYPE html><html><head>';
+            $html .= '<title>' . esc($this->titulo) . '</title>';
+            $html .= '<style>body{font-family:Arial;}</style>';
+            $html .= '</head><body>';
+            $html .= '<h1>' . esc($this->titulo) . '</h1>';
+            $html .= $this->contenido;
+            $html .= '</body></html>';
+
+            return $html;
+        }
+
+        // Método para generar PDF de una película
+        public function peliculaPdf(array $pelicula): string
+        {
+            $this->setTitulo('Ficha: ' . $pelicula['titulo']);
+
+            $contenido = '<table border="1" cellpadding="10">';
+            $contenido .= '<tr><th>Campo</th><th>Valor</th></tr>';
+            $contenido .= '<tr><td>ID</td><td>' . $pelicula['id'] . '</td></tr>';
+            $contenido .= '<tr><td>Título</td><td>' . esc($pelicula['titulo']) . '</td></tr>';
+            $contenido .= '<tr><td>Descripción</td><td>' . esc($pelicula['descripcion'] ?? '') . '</td></tr>';
+            $contenido .= '</table>';
+
+            $this->setContenido($contenido);
+            return $this->generar();
+        }
+    }
+
+
+================================================================================
+  3.2 USAR LA LIBRERÍA EN UN CONTROLADOR
+================================================================================
+
+    use App\Libraries\PdfGenerator;
+
+    public function pdf($id = null)
+    {
+        $pelicula = $this->peliculaModel->find($id);
+
+        if ($pelicula === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        // Crear instancia de nuestra librería
+        $pdf = new PdfGenerator();
+        $html = $pdf->peliculaPdf($pelicula);
+
+        // Enviar como respuesta HTML (o PDF con DOMPDF)
+        return $this->response
+            ->setHeader('Content-Type', 'text/html')
+            ->setBody($html);
+    }
+
+
+================================================================================
+  3.3 REGISTRAR COMO SERVICIO (OPCIONAL)
+================================================================================
+
+  Para que sea accesible con service('pdfGenerator'), registramos en:
+
+  ARCHIVO: app/Config/Services.php
+  ────────────────────────────────
+
+    use App\Libraries\PdfGenerator;
+
+    public static function pdfGenerator(bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('pdfGenerator');
+        }
+
+        return new PdfGenerator();
+    }
+
+  Ahora podemos usar:
+
+    $pdf = service('pdfGenerator');
+    $html = $pdf->peliculaPdf($pelicula);
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: LIBRERÍAS DE TERCEROS (VÍA COMPOSER)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  4.1 INSTALAR LIBRERÍAS CON COMPOSER
+================================================================================
+
+  Composer es el gestor de paquetes de PHP. Instala librerías de terceros
+  en la carpeta vendor/.
+
+  EJEMPLO: Instalar DOMPDF (generación de PDFs):
+
+    composer require dompdf/dompdf
+
+  O con DDEV:
+
+    ddev composer require dompdf/dompdf
+
+  EJEMPLO: Usar DOMPDF en el controlador:
+
+    use Dompdf\Dompdf;
+
+    public function exportarPdf($id)
+    {
+        $pelicula = $this->peliculaModel->find($id);
+
+        // Generar HTML
+        $html = view('peliculas/pdf', ['pelicula' => $pelicula]);
+
+        // Crear PDF con DOMPDF
+        $dompdf = new Dompdf();
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        // Descargar el PDF
+        $dompdf->stream('pelicula_' . $id . '.pdf');
+        exit;
+    }
+
+
+================================================================================
+  4.2 LIBRERÍAS POPULARES PARA CODEIGNITER 4
+================================================================================
+
+  ┌──────────────────────────┬──────────────────────────────────────────┐
+  │ Paquete                  │ ¿Para qué sirve?                         │
+  ├──────────────────────────┼──────────────────────────────────────────┤
+  │ dompdf/dompdf            │ Generar PDFs desde HTML                  │
+  │ codeigniter4/shield      │ Autenticación y autorización             │
+  │ codeigniter4/settings    │ Configuración dinámica desde la BD       │
+  │ phpmailer/phpmailer      │ Envío de emails avanzado                 │
+  │ intervention/image       │ Manipulación de imágenes                 │
+  │ stripe/stripe-php        │ Pagos con Stripe                         │
+  │ paypal/paypal-checkout-sdk│ Pagos con PayPal                        │
+  │ firebase/php-jwt         │ JSON Web Tokens                          │
+  │ phpoffice/phpspreadsheet │ Generar archivos Excel                   │
+  │ league/csv               │ Leer/escribir archivos CSV               │
+  │ fakerphp/faker           │ Generar datos falsos para seeders        │
+  └──────────────────────────┴──────────────────────────────────────────┘
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: SERVICIOS EN CODEIGNITER 4
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  5.1 ¿QUÉ ES UN SERVICIO?
+================================================================================
+
+  Un servicio es una instancia de clase gestionada por el framework.
+  El contenedor de servicios se asegura de:
+    - Crear la instancia solo cuando se necesita (lazy loading)
+    - Reutilizar la misma instancia (singleton) para ahorrar memoria
+    - Permitir reemplazar implementaciones fácilmente (para testing)
+
+  SERVICIOS PREDEFINIDOS:
+  ─────────────────────
+    service('email')       → Instancia de Email
+    service('encrypter')   → Instancia del encriptador
+    service('image')       → Instancia del manipulador de imágenes
+    service('request')     → Objeto de la petición HTTP actual
+    service('response')    → Objeto de la respuesta HTTP
+    service('session')     → Instancia de la sesión
+    service('validation')  → Instancia del validador
+    service('logger')      → Instancia del logger
+    service('cache')       → Instancia del sistema de caché
+
+
+================================================================================
+  5.2 SHARED vs NON-SHARED
+================================================================================
+
+  Por defecto, service() devuelve una instancia COMPARTIDA (shared):
+
+    $a = service('email');
+    $b = service('email');
+    // $a y $b son EL MISMO OBJETO (misma referencia en memoria)
+
+  Para obtener una instancia NUEVA (independiente):
+
+    $a = service('email', false);
+    $b = service('email', false);
+    // $a y $b son OBJETOS DIFERENTES
+
+  ¿Cuándo usar non-shared?
+    - Cuando necesitas configuraciones diferentes para cada instancia.
+    - Ejemplo: enviar 2 emails diferentes al mismo tiempo.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  RESUMEN
+████████████████████████████████████████████████████████████████████████████████
+
+  1. Librerías = clases reutilizables con funcionalidad específica
+  2. CodeIgniter trae librerías integradas: Session, Validation, Upload, etc.
+  3. Las librerías personalizadas van en app/Libraries/
+  4. Se acceden con service(), new, o helper()
+  5. Las de terceros se instalan con Composer
+  6. Se pueden registrar como servicios en Config/Services.php
+  7. service() devuelve singletons por defecto (usa false para nueva instancia)
+
+================================================================================

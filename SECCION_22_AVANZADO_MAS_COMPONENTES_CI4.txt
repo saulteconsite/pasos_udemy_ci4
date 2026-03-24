@@ -1,0 +1,651 @@
+================================================================================
+  SECCIÓN 22: AVANZADO - MÁS COMPONENTES DE CODEIGNITER 4
+  Proyecto Udemy - Explicación detallada con ejemplos del proyecto
+================================================================================
+
+
+████████████████████████████████████████████████████████████████████████████████
+  INTRODUCCIÓN: ¿QUÉ VEREMOS EN ESTA SECCIÓN?
+████████████████████████████████████████████████████████████████████████████████
+
+  CodeIgniter 4 tiene muchos componentes que van más allá del MVC básico.
+  En esta sección exploramos componentes avanzados que hacen tu aplicación
+  más potente, segura y eficiente:
+
+    1. El archivo .env y los entornos de ejecución
+    2. Spark: la línea de comandos de CodeIgniter
+    3. Eventos (Events)
+    4. Caché
+    5. Envío de emails
+    6. Encriptación de datos
+    7. Manejo de errores y excepciones
+    8. Internacionalización (i18n)
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 1: EL ARCHIVO .env - CONFIGURACIÓN POR ENTORNO
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  1.1 ¿QUÉ ES EL ARCHIVO .env?
+================================================================================
+
+  El archivo .env es un archivo de TEXTO PLANO que contiene variables de
+  configuración específicas para cada ENTORNO (desarrollo, producción, etc.).
+
+  ¿POR QUÉ ES NECESARIO?
+  Imagina que tienes tu app en local y en un servidor de producción.
+  La base de datos local se llama "udemy_local" y la de producción
+  "udemy_prod". Sin .env tendrías que CAMBIAR el código cada vez que
+  despliegues. Con .env, cada entorno tiene su propio archivo.
+
+  NUESTRO ARCHIVO .env EN EL PROYECTO:
+
+    app/Config/.env → El framework lo busca en la RAÍZ del proyecto
+
+  El archivo se distribuye como "env" (sin punto). Al instalarlo, lo
+  renombramos a ".env":
+
+    cp env .env
+
+  Y empezamos el archivo con el ".".
+
+
+================================================================================
+  1.2 VARIABLES PRINCIPALES DEL .env
+================================================================================
+
+  #--------------------------------------------------------------------
+  # ENTORNO DE EJECUCIÓN
+  #--------------------------------------------------------------------
+  # development = modo desarrollo (errores detallados, debug toolbar)
+  # production  = modo producción (errores genéricos, sin debug)
+  # testing     = modo pruebas (para tests unitarios)
+  CI_ENVIRONMENT = development
+
+  #--------------------------------------------------------------------
+  # BASE URL DE LA APLICACIÓN
+  #--------------------------------------------------------------------
+  app.baseURL = 'https://udemy.ddev.site/'
+
+  #--------------------------------------------------------------------
+  # CONFIGURACIÓN DE LA BASE DE DATOS
+  #--------------------------------------------------------------------
+  database.default.hostname = db
+  database.default.database = db
+  database.default.username = db
+  database.default.password = db
+  database.default.DBDriver = MySQLi
+  database.default.DBPrefix =
+  database.default.port = 3306
+
+  #--------------------------------------------------------------------
+  # CONFIGURACIÓN DE SESIÓN
+  #--------------------------------------------------------------------
+  # Opciones: CodeIgniter\Session\Handlers\FileHandler (archivos)
+  #           CodeIgniter\Session\Handlers\DatabaseHandler (base de datos)
+  #           CodeIgniter\Session\Handlers\MemcachedHandler (Memcached)
+  #           CodeIgniter\Session\Handlers\RedisHandler (Redis)
+  # session.driver = 'CodeIgniter\Session\Handlers\FileHandler'
+  # session.cookieName = 'ci_session'
+  # session.savePath = WRITEPATH . 'session'
+
+  #--------------------------------------------------------------------
+  # CLAVE DE ENCRIPTACIÓN (PARA ENCRIPTAR DATOS SENSIBLES)
+  #--------------------------------------------------------------------
+  # encryption.key = hex2bin:abc123...
+
+
+================================================================================
+  1.3 ¿CÓMO FUNCIONA INTERNAMENTE?
+================================================================================
+
+  Cuando CodeIgniter arranca, lee el archivo .env y convierte cada línea
+  en una variable de entorno del sistema operativo usando putenv().
+
+  Luego, los archivos de configuración (Config/*.php) leen esas variables.
+
+  EJEMPLO EN app/Config/Database.php:
+
+    public array $default = [
+        'hostname' => 'localhost',     // Valor por defecto
+        'database' => '',
+        'username' => '',
+        'password' => '',
+        // ...
+    ];
+
+  Cuando existe database.default.hostname en .env, CodeIgniter lo lee
+  y SOBREESCRIBE el valor por defecto. Así:
+
+    .env:  database.default.hostname = db
+    ↓
+    $default['hostname'] = 'db'  (en vez de 'localhost')
+
+  FUNCIÓN PARA LEER VARIABLES DE ENTORNO EN TU CÓDIGO:
+
+    $valor = env('database.default.hostname');  // 'db'
+    $valor = env('CI_ENVIRONMENT');              // 'development'
+    $valor = env('VARIABLE_QUE_NO_EXISTE', 'valor_defecto');
+
+
+================================================================================
+  1.4 ¿POR QUÉ .env ESTÁ EN EL .gitignore?
+================================================================================
+
+  NUNCA debes subir .env al repositorio git porque contiene:
+    - Contraseñas de base de datos
+    - Claves de encriptación
+    - Claves de APIs (PayPal, Stripe, etc.)
+
+  En nuestro .gitignore:
+
+    .env
+
+  Cada desarrollador o servidor tiene su propio .env con sus credenciales.
+  Se suele incluir un archivo "env.example" con las variables pero SIN
+  los valores reales, como guía.
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 2: SPARK - LA LÍNEA DE COMANDOS DE CODEIGNITER
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  2.1 ¿QUÉ ES SPARK?
+================================================================================
+
+  Spark es la herramienta de línea de comandos (CLI) de CodeIgniter 4.
+  Es similar a Artisan de Laravel o bin/console de Symfony.
+
+  Se ejecuta con:
+
+    php spark [comando]
+
+  O con DDEV:
+
+    ddev exec php spark [comando]
+
+
+================================================================================
+  2.2 COMANDOS MÁS USADOS
+================================================================================
+
+  ┌───────────────────────────────────┬────────────────────────────────────────┐
+  │ Comando                           │ ¿Qué hace?                             │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ INFORMACIÓN                       │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark                         │ Muestra todos los comandos disponibles │
+  │ php spark env                     │ Muestra el entorno actual (dev/prod)   │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ SERVIDOR                          │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark serve                   │ Inicia el servidor de desarrollo       │
+  │ php spark serve --port 8081       │ Inicia en un puerto diferente          │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ MIGRACIONES                       │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark migrate                 │ Ejecuta migraciones pendientes         │
+  │ php spark migrate:rollback        │ Revierte la última migración           │
+  │ php spark migrate:refresh         │ Revierte TODO y migra desde cero       │
+  │ php spark migrate:status          │ Muestra estado de las migraciones      │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ GENERADORES (crear archivos)      │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark make:controller Nombre  │ Crea un controlador                    │
+  │ php spark make:model Nombre       │ Crea un modelo                         │
+  │ php spark make:migration Nombre   │ Crea una migración                     │
+  │ php spark make:seeder Nombre      │ Crea un seeder                         │
+  │ php spark make:filter Nombre      │ Crea un filtro                         │
+  │ php spark make:entity Nombre      │ Crea una entidad                       │
+  │ php spark make:command Nombre     │ Crea un comando personalizado          │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ SEEDERS                           │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark db:seed PeliculaSeeder  │ Ejecuta un seeder específico           │
+  │ php spark db:seed                 │ Ejecuta el seeder DatabaseSeeder       │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ RUTAS                             │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark routes                  │ Lista todas las rutas definidas        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ BASE DE DATOS                     │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark db:table peliculas      │ Muestra la estructura de una tabla     │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ CACHÉ                             │                                        │
+  ├───────────────────────────────────┼────────────────────────────────────────┤
+  │ php spark cache:clear             │ Limpia toda la caché                   │
+  └───────────────────────────────────┴────────────────────────────────────────┘
+
+
+================================================================================
+  2.3 CREAR ARCHIVOS CON make:
+================================================================================
+
+  Los generadores crean archivos con la estructura básica correcta.
+  En vez de copiar y pegar, spark genera el esqueleto:
+
+    php spark make:controller Producto
+
+  Crea: app/Controllers/Producto.php con:
+
+    <?php
+    namespace App\Controllers;
+
+    class Producto extends BaseController
+    {
+        public function index()
+        {
+            //
+        }
+    }
+
+  Con la opción --restful genera un ResourceController para API:
+
+    php spark make:controller ApiProducto --restful
+
+  Crea: app/Controllers/ApiProducto.php con los métodos
+  index(), show(), create(), update(), delete() ya definidos.
+
+
+================================================================================
+  2.4 CREAR COMANDOS PERSONALIZADOS
+================================================================================
+
+  Puedes crear tus propios comandos de spark:
+
+    php spark make:command LimpiarImagenes
+
+  Crea: app/Commands/LimpiarImagenes.php
+
+    <?php
+    namespace App\Commands;
+
+    use CodeIgniter\CLI\BaseCommand;
+    use CodeIgniter\CLI\CLI;
+
+    class LimpiarImagenes extends BaseCommand
+    {
+        protected $group       = 'App';
+        protected $name        = 'imagenes:limpiar';
+        protected $description = 'Elimina imágenes huérfanas de uploads/';
+
+        public function run(array $params)
+        {
+            $peliculaModel = model('PeliculaModel');
+            $imagenes = $peliculaModel->findColumn('imagen');
+
+            $directorio = FCPATH . 'uploads/peliculas/';
+            $archivos = glob($directorio . '*');
+
+            $eliminados = 0;
+            foreach ($archivos as $archivo) {
+                $nombre = basename($archivo);
+                if (!in_array($nombre, $imagenes ?? [])) {
+                    unlink($archivo);
+                    $eliminados++;
+                    CLI::write("Eliminado: $nombre", 'yellow');
+                }
+            }
+
+            CLI::write("Total eliminados: $eliminados", 'green');
+        }
+    }
+
+  Uso:
+    php spark imagenes:limpiar
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 3: EVENTOS (EVENTS)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  3.1 ¿QUÉ SON LOS EVENTOS?
+================================================================================
+
+  Los eventos permiten ejecutar código cuando ocurre algo en la aplicación,
+  SIN modificar el código original. Es el patrón "Observer" o "Pub/Sub".
+
+  Ejemplo: Cada vez que se crea una película, queremos enviar un email
+  al administrador. Sin eventos, añadiríamos código en el controlador.
+  Con eventos, lo hacemos DE FORMA DESACOPLADA.
+
+
+================================================================================
+  3.2 DEFINIR Y ESCUCHAR EVENTOS
+================================================================================
+
+  ARCHIVO: app/Config/Events.php
+  ─────────────────────────────
+
+    use CodeIgniter\Events\Events;
+
+    // Escuchar el evento 'pelicula_creada'
+    Events::on('pelicula_creada', static function ($datos) {
+        // Enviar email al admin
+        $email = service('email');
+        $email->setTo('admin@ejemplo.com');
+        $email->setSubject('Nueva película: ' . $datos['titulo']);
+        $email->setMessage('Se ha creado la película: ' . $datos['titulo']);
+        $email->send();
+
+        // También podríamos escribir en un log
+        log_message('info', 'Película creada: ' . $datos['titulo']);
+    });
+
+  DISPARAR EL EVENTO (en el controlador):
+  ───────────────────────────────────────
+
+    use CodeIgniter\Events\Events;
+
+    public function store()
+    {
+        $datos = [
+            'titulo'      => $this->request->getPost('titulo'),
+            'descripcion' => $this->request->getPost('descripcion'),
+        ];
+
+        if ($this->peliculaModel->save($datos)) {
+            // Disparamos el evento DESPUÉS de guardar exitosamente
+            Events::trigger('pelicula_creada', $datos);
+
+            return redirect()->to('/peliculas')->with('mensaje', 'Creada');
+        }
+    }
+
+  EVENTOS PREDEFINIDOS DE CODEIGNITER:
+  ──────────────────────────────────
+    'pre_system'   → Antes de que el framework procese la petición
+    'post_system'  → Después de enviar la respuesta al navegador
+    'email'        → Cuando se envía un email (para logging, etc.)
+    'DBQuery'      → Cuando se ejecuta una consulta a la BD
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 4: CACHÉ
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  4.1 ¿PARA QUÉ SIRVE LA CACHÉ?
+================================================================================
+
+  La caché guarda el resultado de operaciones costosas (consultas a la BD,
+  cálculos complejos) para no repetirlas en cada petición.
+
+  Sin caché: Cada visita a /peliculas ejecuta la consulta SQL completa.
+  Con caché: La primera visita ejecuta la SQL y guarda el resultado.
+             Las siguientes visitas leen de la caché (MUCHO más rápido).
+
+
+================================================================================
+  4.2 USAR LA CACHÉ EN EL CÓDIGO
+================================================================================
+
+  ARCHIVO: app/Config/Cache.php
+  ─────────────────────────────
+    - handler: 'file' (por defecto), 'redis', 'memcached', 'predis'
+    - storePath: writable/cache/ (dónde se guardan los archivos de caché)
+
+  EJEMPLO EN EL CONTROLADOR:
+  ─────────────────────────
+
+    public function index()
+    {
+        // Intentamos leer de la caché (clave: 'peliculas_listado')
+        $peliculas = cache('peliculas_listado');
+
+        // Si NO está en caché, consultamos la BD y lo guardamos
+        if ($peliculas === null) {
+            $peliculas = $this->peliculaModel->getPeliculasConCategoria();
+
+            // Guardamos en caché durante 5 minutos (300 segundos)
+            cache()->save('peliculas_listado', $peliculas, 300);
+        }
+
+        $datos['peliculas'] = $peliculas;
+        return view('peliculas/index', $datos);
+    }
+
+  INVALIDAR LA CACHÉ (cuando se modifica un dato):
+  ───────────────────────────────────────────────
+
+    public function store()
+    {
+        // ... guardar película ...
+
+        // Eliminamos la caché del listado para que se regenere
+        cache()->delete('peliculas_listado');
+
+        return redirect()->to('/peliculas');
+    }
+
+  OTROS MÉTODOS:
+  ────────────
+    cache()->save('clave', $valor, $ttl)  → Guardar (ttl = segundos)
+    cache('clave')                         → Leer (null si no existe)
+    cache()->get('clave')                  → Leer (equivalente)
+    cache()->delete('clave')               → Eliminar una clave
+    cache()->clean()                       → Eliminar TODA la caché
+    cache()->getCacheInfo()                → Información de la caché
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 5: ENVÍO DE EMAILS
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  5.1 CONFIGURAR EL EMAIL
+================================================================================
+
+  ARCHIVO: app/Config/Email.php (o en el .env)
+  ──────────────────────────────────────────────
+
+    public string $protocol   = 'smtp';
+    public string $SMTPHost   = 'smtp.gmail.com';
+    public int    $SMTPPort   = 587;
+    public string $SMTPUser   = 'tu-email@gmail.com';
+    public string $SMTPPass   = 'tu-contraseña-de-app';
+    public string $SMTPCrypto = 'tls';
+    public string $mailType   = 'html';
+
+  EN EL .env:
+    email.protocol = smtp
+    email.SMTPHost = smtp.gmail.com
+    email.SMTPPort = 587
+    email.SMTPUser = tu-email@gmail.com
+    email.SMTPPass = tu-contraseña-de-app
+    email.SMTPCrypto = tls
+    email.mailType = html
+
+
+================================================================================
+  5.2 ENVIAR UN EMAIL DESDE EL CÓDIGO
+================================================================================
+
+    $email = service('email');
+
+    $email->setFrom('tu-email@gmail.com', 'CI4 Udemy');
+    $email->setTo('destinatario@ejemplo.com');
+    $email->setCC('copia@ejemplo.com');     // Copia (opcional)
+    $email->setBCC('oculta@ejemplo.com');   // Copia oculta (opcional)
+    $email->setSubject('Nueva película creada');
+
+    // Cuerpo del email (HTML porque mailType = 'html')
+    $email->setMessage('
+        <h1>Se ha creado una nueva película</h1>
+        <p>Título: <strong>' . esc($datos['titulo']) . '</strong></p>
+    ');
+
+    // Adjuntar archivos (opcional)
+    $email->attach(FCPATH . 'uploads/peliculas/' . $imagen);
+
+    // Enviar
+    if ($email->send()) {
+        // Email enviado correctamente
+    } else {
+        // Error: $email->printDebugger() muestra el detalle
+        log_message('error', $email->printDebugger());
+    }
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 6: ENCRIPTACIÓN DE DATOS
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  6.1 ¿CUÁNDO USAR ENCRIPTACIÓN?
+================================================================================
+
+  La encriptación protege datos SENSIBLES en la base de datos o en cookies.
+  No confundir con HASH (contraseñas): el hash es irreversible, la
+  encriptación es REVERSIBLE (puedes desencriptar para leer el dato).
+
+  Usamos encriptación para: números de tarjeta, datos médicos, tokens...
+  Usamos hash para: contraseñas (no necesitamos ver el valor original).
+
+
+================================================================================
+  6.2 CONFIGURAR Y USAR
+================================================================================
+
+  GENERAR CLAVE DE ENCRIPTACIÓN:
+
+    php spark key:generate
+
+  Esto añade al .env:
+    encryption.key = hex2bin:...una-clave-larga...
+
+  ENCRIPTAR Y DESENCRIPTAR:
+
+    $encrypter = service('encrypter');
+
+    // Encriptar
+    $datoEncriptado = $encrypter->encrypt('4242-4242-4242-4242');
+    // Resultado: cadena binaria ilegible
+
+    // Para guardarlo en la BD (como texto), codificamos en base64
+    $paraGuardar = base64_encode($datoEncriptado);
+
+    // Desencriptar
+    $datoOriginal = $encrypter->decrypt(base64_decode($paraGuardar));
+    // Resultado: '4242-4242-4242-4242'
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 7: ENTORNOS DE EJECUCIÓN (development/production)
+████████████████████████████████████████████████████████████████████████████████
+
+================================================================================
+  7.1 LOS 3 ENTORNOS
+================================================================================
+
+  CodeIgniter tiene 3 entornos, definidos en el .env:
+
+  CI_ENVIRONMENT = development
+  CI_ENVIRONMENT = production
+  CI_ENVIRONMENT = testing
+
+  CADA UNO CARGA UN ARCHIVO DE CONFIGURACIÓN DIFERENTE:
+
+    app/Config/Boot/development.php  → error_reporting(E_ALL)
+    app/Config/Boot/production.php   → error_reporting(0)
+    app/Config/Boot/testing.php      → Para PHPUnit
+
+  EN DESARROLLO (development):
+    ✓ Errores detallados con stack trace
+    ✓ Barra de debug (Debug Toolbar) visible
+    ✓ Mensajes de log detallados
+    ✗ NO es seguro para producción
+
+  EN PRODUCCIÓN (production):
+    ✓ Errores genéricos (sin detalles técnicos)
+    ✓ Sin Debug Toolbar
+    ✓ Solo errores críticos se registran
+    ✓ Seguro para usuarios finales
+
+  CÓMO VERIFICAR EL ENTORNO ACTUAL:
+
+    if (ENVIRONMENT === 'development') {
+        // Solo en desarrollo
+    }
+
+    // O con spark:
+    php spark env
+
+
+████████████████████████████████████████████████████████████████████████████████
+  PARTE 8: LOGGING (REGISTRO DE ERRORES Y EVENTOS)
+████████████████████████████████████████████████████████████████████████████████
+
+  CodeIgniter tiene un sistema de logging que escribe en:
+    writable/logs/log-YYYY-MM-DD.php
+
+  NIVELES DE LOG (de más a menos crítico):
+  ──────────────────────────────────────
+
+    log_message('emergency', 'El sistema se cayó');
+    log_message('alert',     'Se necesita acción inmediata');
+    log_message('critical',  'Error crítico');
+    log_message('error',     'Error de ejecución');
+    log_message('warning',   'Advertencia');
+    log_message('notice',    'Evento notable');
+    log_message('info',      'Información general');
+    log_message('debug',     'Información de depuración');
+
+  EJEMPLO PRÁCTICO EN EL PROYECTO:
+
+    public function delete($id = null)
+    {
+        $pelicula = $this->peliculaModel->find($id);
+
+        if ($pelicula === null) {
+            log_message('warning', 'Intento de eliminar película inexistente: ID ' . $id);
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $this->peliculaModel->delete($id);
+
+        log_message('info', 'Película eliminada: ' . $pelicula['titulo']
+            . ' por usuario: ' . session()->get('usuario_nombre'));
+    }
+
+  CONFIGURACIÓN EN app/Config/Logger.php:
+    - threshold: Nivel mínimo de log que se guarda (4 = error y superiores)
+    - dateFormat: Formato de fecha en los logs
+
+
+================================================================================
+  RESUMEN DE COMANDOS SPARK MÁS IMPORTANTES
+================================================================================
+
+  # Ver todos los comandos disponibles
+  php spark
+
+  # Generar archivos
+  php spark make:controller NombreControlador
+  php spark make:model NombreModelo
+  php spark make:migration NombreMigracion
+  php spark make:seeder NombreSeeder
+  php spark make:filter NombreFiltro
+  php spark make:command NombreComando
+
+  # Migraciones
+  php spark migrate
+  php spark migrate:rollback
+  php spark migrate:refresh
+  php spark migrate:status
+
+  # Seeders
+  php spark db:seed NombreSeeder
+
+  # Utilidades
+  php spark routes
+  php spark env
+  php spark key:generate
+  php spark cache:clear
+  php spark db:table nombre_tabla
+
+================================================================================
